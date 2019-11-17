@@ -1,0 +1,27 @@
+{
+  "name": "trace",
+  "version": "0.0.1",
+  "description": "Trace - An esoteric, specialized, functional programming language",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bluehexagons/trace.git"
+  },
+  "keywords": [
+    "esoteric"
+  ],
+  "author": "bluehexagons",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bluehexagons/trace/issues"
+  },
+  "homepage": "https://github.com/bluehexagons/trace#readme",
+  "devDependencies": {
+    "@types/node": "^12.12.8",
+    "typescript": "^3.7.2"
+  }
+}
