@@ -1,7 +1,7 @@
 # trace
 Trace - An esoteric, specialized, functional programming language
 
-This repository contains a basic JavaScript implementation.
+This repository contains a basic TypeScript implementation, which was developed for Antistatic.
 
 
 Features:
