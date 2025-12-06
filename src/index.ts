@@ -1,10 +1,10 @@
 // Export the main Trace class and utility function for easy importing
-export { Trace, runTrace } from './trace'
+export { Trace, runTrace } from './trace.js'
 
-// Demo usage when run directly
-if (require.main === module) {
-  // Import the function we just exported
-  const { runTrace: run } = require('./index')
-  console.log(`1 + 10 = ${run('1 + 10')}`)
+// Demo usage when run directly as main module
+// In ESM, we check process.argv to see if this is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const { runTrace } = await import('./trace.js')
+  console.log(`1 + 10 = ${runTrace('1 + 10')}`)
 }
 

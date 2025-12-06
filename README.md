@@ -12,10 +12,10 @@ npm install trace
 
 ## Usage
 
-### JavaScript/Node.js
+### JavaScript/Node.js (ESM)
 
 ```javascript
-const { runTrace, Trace } = require('trace');
+import { runTrace, Trace } from 'trace';
 
 // Quick execution
 const result = runTrace('1 + 10');

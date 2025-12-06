@@ -6,9 +6,9 @@
         "declarationMap": true,
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
-        "lib": ["ES2020"],
-        "module": "commonjs",
-        "moduleResolution": "node",
+        "lib": ["ES2022"],
+        "module": "ES2022",
+        "moduleResolution": "bundler",
         "newLine": "LF",
         "noImplicitAny": true,
         "noImplicitReturns": true,
@@ -20,7 +20,7 @@
         "skipLibCheck": true,
         "sourceMap": true,
         "strict": true,
-        "target": "ES2020"
+        "target": "ES2022"
     },
     "include": [
         "src/**/*.ts"

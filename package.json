@@ -2,17 +2,16 @@
   "name": "trace",
   "version": "0.0.1",
   "description": "Trace - An esoteric, specialized, functional programming language",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
       "import": "./dist/index.js"
     },
     "./trace": {
       "types": "./dist/trace.d.ts",
-      "require": "./dist/trace.js",
       "import": "./dist/trace.js"
     }
   },
