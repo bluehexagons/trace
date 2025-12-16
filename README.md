@@ -4,8 +4,56 @@ Trace - An esoteric, specialized, functional programming language
 
 This repository contains a basic TypeScript implementation, which was developed for Antistatic.
 
+## Installation
 
-Features:
+```bash
+npm install trace
+```
+
+## Usage
+
+### JavaScript/Node.js (ESM)
+
+```javascript
+import { runTrace, Trace } from 'trace';
+
+// Quick execution
+const result = runTrace('1 + 10');
+console.log(result); // 11
+
+// Using the Trace class for more control
+const script = Trace.parse('x = 5; x * 2');
+const output = script.run();
+console.log(output); // 10
+```
+
+### TypeScript
+
+```typescript
+import { runTrace, Trace } from 'trace';
+
+// Quick execution
+const result: number | null = runTrace('1 + 10');
+console.log(result); // 11
+
+// Using the Trace class for more control
+const script: Trace = Trace.parse('x = 5; x * 2');
+const output: number | null = script.run();
+console.log(output); // 10
+
+// Passing arguments to scripts
+const sum = runTrace('[...] t = 0; i = 1; &0 > 0 ? ()=>{t += &i; i++ <= &0 ? () : t}', 1, 2, 3, 4);
+console.log(sum); // 10
+```
+
+## Building
+
+```bash
+npm install
+npm run build
+```
+
+## Features:
 * near-total lack of syntax error checking
 * does math
 * more powerful than it had to be

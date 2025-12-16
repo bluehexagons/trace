@@ -415,12 +415,12 @@ export class Trace {
     if (match !== null) {
       params = match[1].split(',')
       stackSize = match[3] === '...' ? -1 : params.length
-      stringLeft = stringLeft.substr(match[0].length)
+      stringLeft = stringLeft.substring(match[0].length)
     } else {
       match = /^\[([0-9]+)\]/.exec(stringLeft)
       if (match !== null) {
         stackSize = parseInt(match[1], 10)
-        stringLeft = stringLeft.substr(match[0].length)
+        stringLeft = stringLeft.substring(match[0].length)
       }
     }
 
@@ -445,7 +445,7 @@ export class Trace {
       }
 
       // remove consumed text from string
-      stringLeft = stringLeft.substr(match[0].length)
+      stringLeft = stringLeft.substring(match[0].length)
 
       if (kind === TokenKind.beep) {
         tokens.push({
