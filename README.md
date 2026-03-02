@@ -4,6 +4,8 @@ Trace - An esoteric, specialized, functional programming language
 
 This repository contains a basic TypeScript implementation, which was developed for Antistatic.
 
+Try Trace in a sandbox: https://bluehexagons.github.io/trace-sandbox/
+
 ## Platform Support
 
 The core library (`trace`) works in both Node.js (>=16) and modern browsers. The `trace/cli` entry point is Node.js-only.
