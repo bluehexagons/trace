@@ -1,4 +1,4 @@
-import { performance } from 'perf_hooks'
+// performance is available globally in Node.js (>=16) and browsers
 
 // TODO: consider |> function calls
 const enum TokenKind {

@@ -4,6 +4,10 @@ Trace - An esoteric, specialized, functional programming language
 
 This repository contains a basic TypeScript implementation, which was developed for Antistatic.
 
+## Platform Support
+
+The core library (`trace`) works in both Node.js (>=16) and modern browsers. The `trace/cli` entry point is Node.js-only.
+
 ## Installation
 
 ```bash
@@ -25,6 +29,28 @@ console.log(result); // 11
 const script = Trace.parse('x = 5; x * 2');
 const output = script.run();
 console.log(output); // 10
+```
+
+### Browser (ESM)
+
+The package ships as standard ESM and works directly in browsers via a bundler (Webpack, Vite, Rollup, etc.) or via an import map:
+
+```html
+<script type="module">
+  import { runTrace, Trace } from '/node_modules/trace/dist/index.js';
+
+  const result = runTrace('1 + 10');
+  console.log(result); // 11
+</script>
+```
+
+With a bundler, the import is the same as in Node.js:
+
+```javascript
+import { runTrace, Trace } from 'trace';
+
+const result = runTrace('1 + 10');
+console.log(result); // 11
 ```
 
 ### TypeScript
