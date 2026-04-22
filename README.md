@@ -13,7 +13,13 @@ The core library (`trace`) works in both Node.js (>=16) and modern browsers. The
 ## Installation
 
 ```bash
-npm install trace
+npm install https://codeload.github.com/bluehexagons/trace/tar.gz/refs/tags/v0.0.6
+```
+
+For local development against a checkout:
+
+```bash
+npm install ../trace
 ```
 
 ## Usage
