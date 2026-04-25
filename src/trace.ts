@@ -367,9 +367,6 @@ const intoOperands = new Set([
   TokenKind.startGroup,
 ])
 
-type CachedScript = { stackSize: number, tokens: TraceToken[] }
-
-const cachedScripts = new Map<string, CachedScript>()
 const stdlib = new Map<string, Trace>()
 
 export class Trace {
@@ -383,11 +380,7 @@ export class Trace {
   vars: (Map<string, number> | null) = null
   functions: (Map<string, Trace> | null) = null
 
-  constructor(public body: string, public tokens: TraceToken[], public params: string[], public stackSize: number) {
-    if (!cachedScripts.has(body)) {
-      cachedScripts.set(body, {stackSize, tokens})
-    }
-  }
+  constructor(public body: string, public tokens: TraceToken[], public params: string[], public stackSize: number) {}
 
   static parse(s: string) {
     const preprocessed = s.replace(/#[^\n]*/g, '').replace(/\s/g, '')
@@ -400,11 +393,6 @@ export class Trace {
     let params: string[] = []
     const groupLevels: number[] = []
     let match: (RegExpExecArray | null) = null
-
-    if (cachedScripts.has(preprocessed)) {
-      const cached = cachedScripts.get(preprocessed) as CachedScript
-      return new Trace(preprocessed, cached.tokens, params, cached.stackSize)
-    }
 
     if (stringLeft.length === 0) {
       return new Trace(preprocessed, tokens, params, stackSize)
@@ -439,9 +427,7 @@ export class Trace {
         }
       }
       if (match === null) {
-        // didn't find a match, critical syntax error
-        this.errorLogger('Unexpected', findOperator ? 'operator:' : 'operand:', stringLeft)
-        return new Trace(preprocessed, tokens, params, stackSize)
+        throw new Error(`Syntax error: unexpected ${findOperator ? 'operator' : 'operand'} "${stringLeft}"`)
       }
 
       // remove consumed text from string
@@ -769,13 +755,13 @@ export class Trace {
           continue
 
         case TokenKind.increment:
-          val = vars.has(f.lastVar) ? vars.get(f.lastVar) as number + 1 : 1
+          val = (vars.has(f.lastVar) ? vars.get(f.lastVar) as number : 0) + 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
           break
 
         case TokenKind.decrement:
-          val = vars.has(f.lastVar) ? vars.get(f.lastVar) as number - 1 : -1
+          val = (vars.has(f.lastVar) ? vars.get(f.lastVar) as number : 0) - 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
           break
@@ -870,7 +856,7 @@ export class Trace {
           f.not = false
         }
         if (f.ptr) {
-          val = f.stack === null ? 0 : val < f.stack.length && val >= 0 ? f.stack[val >>> 0] : 0
+          val = (f.stack === null || val < 0 || !Number.isFinite(val) || val >= f.stack.length) ? 0 : f.stack[val]
           f.ptr = false
         }
         f.lastValue = f.value
@@ -889,15 +875,15 @@ export class Trace {
           break
 
         case TokenKind.div:
-          f.value = f.value / val
+          f.value = val === 0 ? 0 : f.value / val
           break
 
         case TokenKind.mod:
-          f.value = f.value % val
+          f.value = (val === 0 || !Number.isFinite(val)) ? 0 : f.value % val
           break
 
         case TokenKind.pow:
-          f.value = f.value ** val
+          f.value = (f.value === 0 && val < 0) || !Number.isFinite(f.value) || !Number.isFinite(val) ? 0 : f.value ** val
           break
 
         case TokenKind.range:
