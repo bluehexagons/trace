@@ -335,7 +335,6 @@ const intoOperands = new Set([
     7 /* TokenKind.not */,
     9 /* TokenKind.startGroup */,
 ]);
-const cachedScripts = new Map();
 const stdlib = new Map();
 export class Trace {
     body;
@@ -354,9 +353,6 @@ export class Trace {
         this.tokens = tokens;
         this.params = params;
         this.stackSize = stackSize;
-        if (!cachedScripts.has(body)) {
-            cachedScripts.set(body, { stackSize, tokens });
-        }
     }
     static parse(s) {
         const preprocessed = s.replace(/#[^\n]*/g, '').replace(/\s/g, '');
@@ -369,10 +365,6 @@ export class Trace {
         let params = [];
         const groupLevels = [];
         let match = null;
-        if (cachedScripts.has(preprocessed)) {
-            const cached = cachedScripts.get(preprocessed);
-            return new Trace(preprocessed, cached.tokens, params, cached.stackSize);
-        }
         if (stringLeft.length === 0) {
             return new Trace(preprocessed, tokens, params, stackSize);
         }
@@ -404,9 +396,7 @@ export class Trace {
                 }
             }
             if (match === null) {
-                // didn't find a match, critical syntax error
-                this.errorLogger('Unexpected', findOperator ? 'operator:' : 'operand:', stringLeft);
-                return new Trace(preprocessed, tokens, params, stackSize);
+                throw new Error(`Syntax error: unexpected ${findOperator ? 'operator' : 'operand'} "${stringLeft}"`);
             }
             // remove consumed text from string
             stringLeft = stringLeft.substring(match[0].length);
@@ -694,12 +684,12 @@ export class Trace {
                         f.value = f.lastValue;
                         continue;
                     case 44 /* TokenKind.increment */:
-                        val = vars.has(f.lastVar) ? vars.get(f.lastVar) + 1 : 1;
+                        val = (vars.has(f.lastVar) ? vars.get(f.lastVar) : 0) + 1;
                         vars.set(f.lastVar, val);
                         f.value = f.lastValue;
                         break;
                     case 45 /* TokenKind.decrement */:
-                        val = vars.has(f.lastVar) ? vars.get(f.lastVar) - 1 : -1;
+                        val = (vars.has(f.lastVar) ? vars.get(f.lastVar) : 0) - 1;
                         vars.set(f.lastVar, val);
                         f.value = f.lastValue;
                         break;
@@ -787,7 +777,7 @@ export class Trace {
                     f.not = false;
                 }
                 if (f.ptr) {
-                    val = f.stack === null ? 0 : val < f.stack.length && val >= 0 ? f.stack[val >>> 0] : 0;
+                    val = (f.stack === null || val < 0 || !Number.isFinite(val) || val >= f.stack.length) ? 0 : f.stack[val];
                     f.ptr = false;
                 }
                 f.lastValue = f.value;
@@ -802,13 +792,13 @@ export class Trace {
                         f.value = f.value * val;
                         break;
                     case 20 /* TokenKind.div */:
-                        f.value = f.value / val;
+                        f.value = val === 0 ? 0 : f.value / val;
                         break;
                     case 21 /* TokenKind.mod */:
-                        f.value = f.value % val;
+                        f.value = (val === 0 || !Number.isFinite(val)) ? 0 : f.value % val;
                         break;
                     case 22 /* TokenKind.pow */:
-                        f.value = f.value ** val;
+                        f.value = (f.value === 0 && val < 0) || !Number.isFinite(f.value) || !Number.isFinite(val) ? 0 : f.value ** val;
                         break;
                     case 23 /* TokenKind.range */:
                         f.value = f.value + rand() * (val - f.value);
