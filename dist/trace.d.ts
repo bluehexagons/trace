@@ -45,9 +45,11 @@ declare const enum TokenKind {
     powSet = 43,
     increment = 44,
     decrement = 45,
-    statement = 46,
-    separator = 47,
-    beep = 48
+    arrayCreate = 46,
+    arrayRead = 47,
+    statement = 48,
+    separator = 49,
+    beep = 50
 }
 type TraceToken = {
     kind: TokenKind;
@@ -97,11 +99,12 @@ export declare class Trace {
     callParams: string[];
     vars: (Map<string, number> | null);
     functions: (Map<string, Trace> | null);
+    arrays: (Map<string, Float64Array> | null);
     constructor(body: string, tokens: TraceToken[], params: string[], stackSize: number);
     static parse(s: string): Trace;
     run(args?: number[], variables?: ({
         [s: string]: number;
-    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean): number | null;
+    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), arrays?: (Map<string, Float64Array> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean): number | null;
     runWithOptions(options?: TraceRunOptions): TraceRunResult;
 }
 export declare const runTrace: (script: string, ...args: number[]) => number | null;

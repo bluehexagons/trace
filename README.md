@@ -156,6 +156,37 @@ ternary terminates on statement end (semicolon or end of script)
 5. `>` `<` `==` `!=` `>=` `<=`
 6. everything else
 
+# arrays
+
+`arr = [n]` creates a fixed-size array of `n` elements, all initialised to `0`.
+
+`arr[n]` reads element `n` (1-indexed). `arr[0]` returns the array size.
+
+`arr[n] = v` writes to element `n`. Compound assignments work too: `arr[n] += v`.
+
+The index expression can be any Trace expression: `arr[i]`, `arr[i+1]`, `arr[n*2]`, etc. Nested array access (`arr[arr[i]]`) is not supported.
+
+Reading an array variable without an index (`arr`) also returns the size.
+
+```
+arr = [5]       # five-element array
+arr[1] = 10
+arr[2] = 20
+arr[1] + arr[2] # 30
+arr[0]          # 5 (size)
+```
+
+Loop example — sum 1 through 5 via an array:
+```
+arr = [5]; i = 1;
+i <= 5 ? () => { arr[i] = i; i++ <= 5 ? () : 0 };
+s = 0; j = 1;
+j <= 5 ? () => { s += arr[j]; j++ <= 5 ? () : s }
+> 15
+```
+
+In strict mode, reading an unknown array or writing out of bounds is an error.
+
 # script parameters
 
 begin script with:

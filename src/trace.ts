@@ -57,6 +57,9 @@ const enum TokenKind {
   increment,
   decrement,
 
+  arrayCreate,
+  arrayRead,
+
   statement,
   separator,
   beep,
@@ -105,6 +108,10 @@ const operands = [
     kind: TokenKind.tailCall
   },
   {
+    regex: /^[a-zA-Z_][\w.]*\[[^\]]*\]/,
+    kind: TokenKind.arrayRead
+  },
+  {
     regex: /^[a-zA-Z_][\w.]*/,
     kind: TokenKind.variable
   },
@@ -127,6 +134,10 @@ const operands = [
   {
     regex: /^\(/,
     kind: TokenKind.startGroup
+  },
+  {
+    regex: /^\[[^\]]*\]/,
+    kind: TokenKind.arrayCreate
   },
   {
     regex: /^&/,
@@ -398,6 +409,12 @@ class StackFrame {
   setOp = TokenKind.add
   lastVar = ''
   setVar = ''
+  pendingArray = ''    // array name from most recent arrayRead operand
+  pendingIndex = 0     // index from most recent arrayRead operand
+  writeArray = ''      // array name captured by assignment operator
+  writeIndex = 0       // index captured by assignment operator
+  arrayWrite = false
+  newArray: (Float64Array | null) = null
   sign: -1 | 1 = 1
   not = false
   ptr = false
@@ -408,8 +425,49 @@ class StackFrame {
     this.stack = stackLength <= 0 ? null : new Float64Array(stackLength)
   }
 }
-const closeStatement = (f: StackFrame, vars: Map<string, number>, strict = false) => {
+const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<string, Float64Array>, strict = false) => {
+  if (f.newArray !== null) {
+    if (f.setVar !== '') {
+      arrays.set(f.setVar, f.newArray)
+      f.value = f.newArray[0]
+    }
+    f.newArray = null
+    f.setVar = ''
+    f.pendingArray = ''
+    f.arrayWrite = false
+    return
+  }
+
   if (f.setVar === '') {
+    f.pendingArray = ''
+    f.arrayWrite = false
+    return
+  }
+
+  if (f.arrayWrite) {
+    const arr = arrays.get(f.writeArray)
+    const idx = f.writeIndex
+    if (arr !== undefined && idx >= 1 && idx < arr.length) {
+      const cur = arr[idx]
+      switch (f.setOp) {
+      case TokenKind.set:    arr[idx] = f.value; break
+      case TokenKind.addSet: arr[idx] = cur + f.value; break
+      case TokenKind.subSet: arr[idx] = cur - f.value; break
+      case TokenKind.mulSet: arr[idx] = cur * f.value; break
+      case TokenKind.divSet: arr[idx] = f.value === 0 ? 0 : cur / f.value; break
+      case TokenKind.modSet: arr[idx] = (f.value === 0 || !Number.isFinite(f.value)) ? 0 : cur % f.value; break
+      case TokenKind.powSet: arr[idx] = cur ** f.value; break
+      }
+      f.value = arr[idx]
+    } else if (strict) {
+      if (arr === undefined) {
+        throw new Error(`Runtime error: write to unknown array "${f.writeArray}"`)
+      }
+      throw new Error(`Runtime error: index ${idx} out of bounds for array "${f.writeArray}" (size ${arr[0]})`)
+    }
+    f.setVar = ''
+    f.writeArray = ''
+    f.arrayWrite = false
     return
   }
 
@@ -451,6 +509,7 @@ const closeStatement = (f: StackFrame, vars: Map<string, number>, strict = false
 
   f.value = vars.get(f.setVar) as number
   f.setVar = ''
+  f.arrayWrite = false
 }
 
 const intoOperands = new Set([
@@ -478,6 +537,7 @@ export class Trace {
   callParams: string[] = []
   vars: (Map<string, number> | null) = null
   functions: (Map<string, Trace> | null) = null
+  arrays: (Map<string, Float64Array> | null) = null
 
   constructor(public body: string, public tokens: TraceToken[], public params: string[], public stackSize: number) {}
 
@@ -634,6 +694,17 @@ export class Trace {
         if (callArgStrings.length > 0) {
           token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg))
         }
+      } else if (kind === TokenKind.arrayRead) {
+        const bracketPos = match[0].indexOf('[')
+        const indexSrc = match[0].substring(bracketPos + 1, match[0].length - 1)
+        if (indexSrc.length > 0) {
+          token.parsedArgs = [Trace.parse(indexSrc)]
+        }
+      } else if (kind === TokenKind.arrayCreate) {
+        const sizeSrc = match[0].substring(1, match[0].length - 1)
+        if (sizeSrc.length > 0) {
+          token.parsedArgs = [Trace.parse(sizeSrc)]
+        }
       }
       tokens.push(token)
 
@@ -654,6 +725,7 @@ export class Trace {
     variables: ({[s: string]: number} | null) = null,
     vars: (Map<string, number> | null) = null,
     functions: (Map<string, Trace> | null) = null,
+    arrays: (Map<string, Float64Array> | null) = null,
     rand: () => number = Math.random,
     executionLimit = 1000,
     executionStart: number = performance.now(),
@@ -692,6 +764,13 @@ export class Trace {
         this.functions = new Map<string, Trace>()
       }
       functions = this.functions
+    }
+
+    if (arrays === null) {
+      if (this.arrays === null) {
+        this.arrays = new Map<string, Float64Array>()
+      }
+      arrays = this.arrays
     }
 
     if (variables !== null) {
@@ -787,11 +866,12 @@ export class Trace {
           break
 
         case TokenKind.variable:
-          if (strict && !vars.has(t.string) && !isWriteTarget(f.tokens[f.i + 1]?.kind)) {
+          if (strict && !vars.has(t.string) && !arrays.has(t.string) && !isWriteTarget(f.tokens[f.i + 1]?.kind)) {
             throw new Error(`Runtime error: unknown variable "${t.string}"`)
           }
-          val = vars.get(t.string) ?? 0
+          val = vars.get(t.string) ?? arrays.get(t.string)?.[0] ?? 0
           f.lastVar = t.string
+          f.pendingArray = ''
           break
 
         case TokenKind.percent:
@@ -877,7 +957,7 @@ export class Trace {
               const argTrace = parsedArgs?.[i]
               const argValue = argTrace === undefined
                 ? 0
-                : argTrace.run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict)
+                : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict)
               if (context.status !== 'completed') {
                 this.lastRunTime = performance.now() - context.startedAt
                 this.lastRunSteps = context.steps
@@ -917,6 +997,10 @@ export class Trace {
           f.operator = TokenKind.add
           f.setOp = t.kind
           f.setVar = f.lastVar
+          f.arrayWrite = f.pendingArray !== ''
+          f.writeArray = f.pendingArray
+          f.writeIndex = f.pendingIndex
+          f.pendingArray = ''
           f.value = f.lastValue
           continue
 
@@ -938,9 +1022,58 @@ export class Trace {
           f.value = f.lastValue
           break
 
+        case TokenKind.arrayRead: {
+          const arrName = t.string.substring(0, t.string.indexOf('['))
+          const indexTrace = t.parsedArgs?.[0]
+          const idxRaw = indexTrace === undefined ? 0 : (
+            indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0
+          )
+          if (context.status !== 'completed') {
+            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunSteps = context.steps
+            this.lastRunStatus = context.status
+            return 0
+          }
+          const idx = Math.trunc(idxRaw)
+          const arr = arrays.get(arrName)
+          if (idx === 0) {
+            val = arr !== undefined ? arr[0] : 0
+          } else if (arr !== undefined && idx >= 1 && idx < arr.length) {
+            val = arr[idx]
+          } else {
+            if (strict && arr === undefined) {
+              throw new Error(`Runtime error: unknown array "${arrName}"`)
+            }
+            val = 0
+          }
+          f.lastVar = arrName
+          f.pendingArray = arrName
+          f.pendingIndex = idx
+          break
+        }
+
+        case TokenKind.arrayCreate: {
+          const sizeTrace = t.parsedArgs?.[0]
+          const sizeRaw = sizeTrace === undefined ? 0 : (
+            sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0
+          )
+          if (context.status !== 'completed') {
+            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunSteps = context.steps
+            this.lastRunStatus = context.status
+            return 0
+          }
+          const size = Math.max(0, Math.trunc(sizeRaw))
+          const newArr = new Float64Array(size + 1)
+          newArr[0] = size
+          f.newArray = newArr
+          val = size
+          break
+        }
+
         case TokenKind.statement:
         case TokenKind.separator:
-          closeStatement(f, vars, strict)
+          closeStatement(f, vars, arrays, strict)
           f.lastValue = 0
           f.value = 0
           break
@@ -1100,7 +1233,7 @@ export class Trace {
         }
       }
 
-      closeStatement(f, vars, strict)
+      closeStatement(f, vars, arrays, strict)
       value = f.value
     }
 
@@ -1113,6 +1246,7 @@ export class Trace {
   runWithOptions(options: TraceRunOptions = {}): TraceRunResult {
     const vars = options.persist ? null : new Map<string, number>()
     const functions = options.persist ? null : new Map<string, Trace>()
+    const arrays = options.persist ? null : new Map<string, Float64Array>()
     const startedAt = performance.now()
     const context: TraceRunContext = {
       startedAt,
@@ -1133,6 +1267,7 @@ export class Trace {
         options.variables ?? null,
         vars,
         functions,
+        arrays,
         rand,
         options.timeoutMs ?? 1000,
         startedAt,

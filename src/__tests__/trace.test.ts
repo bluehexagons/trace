@@ -270,6 +270,65 @@ describe('script parameters', () => {
   })
 })
 
+describe('arrays', () => {
+  it('creates an array and returns its size', () => {
+    expect(runTrace('arr = [5]; arr[0]')).toBe(5)
+  })
+
+  it('reads from an array element (initially 0)', () => {
+    expect(runTrace('arr = [3]; arr[1]')).toBe(0)
+  })
+
+  it('writes to and reads back an array element', () => {
+    expect(runTrace('arr = [3]; arr[1] = 42; arr[1]')).toBe(42)
+  })
+
+  it('writes multiple elements independently', () => {
+    expect(runTrace('arr = [3]; arr[1] = 10; arr[2] = 20; arr[3] = 30; arr[1] + arr[2] + arr[3]')).toBe(60)
+  })
+
+  it('supports compound assignment on array elements', () => {
+    expect(runTrace('arr = [3]; arr[1] = 5; arr[1] += 3; arr[1]')).toBe(8)
+  })
+
+  it('supports indexed access via variable', () => {
+    expect(runTrace('arr = [3]; arr[2] = 99; i = 2; arr[i]')).toBe(99)
+  })
+
+  it('plain array name returns element count (arr[0])', () => {
+    expect(runTrace('arr = [7]; arr')).toBe(7)
+  })
+
+  it('out-of-bounds read returns 0', () => {
+    expect(runTrace('arr = [3]; arr[9]')).toBe(0)
+  })
+
+  it('can be used with dynamic size', () => {
+    expect(runTrace('n = 5; arr = [n]; arr[0]')).toBe(5)
+  })
+
+  it('works in function bodies', () => {
+    expect(runTrace('arr = [3]; fill()=>{arr[1]=1;arr[2]=2;arr[3]=3}; fill(); arr[1]+arr[2]+arr[3]')).toBe(6)
+  })
+
+  it('loop-fills an array and sums it', () => {
+    const script = 'arr = [5]; i = 1; i <= 5 ? ()=>{arr[i] = i; i++ <= 5 ? () : 0}; s = 0; j = 1; j <= 5 ? ()=>{s += arr[j]; j++ <= 5 ? () : s}'
+    expect(runTrace(script)).toBe(15)
+  })
+
+  it('strict mode: unknown array read throws', () => {
+    const result = runTraceWithOptions('missing[1]', { strict: true })
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('"missing"')
+  })
+
+  it('strict mode: out-of-bounds write throws', () => {
+    const result = runTraceWithOptions('arr = [2]; arr[5] = 1', { strict: true })
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('out of bounds')
+  })
+})
+
 describe('conditionals', () => {
   it('ternary true branch', () => {
     expect(runTrace('1 ? 42')).toBe(42)
