@@ -245,11 +245,12 @@ Use `runTraceWithOptions` or `Trace.runWithOptions` to run code with explicit li
 const result = runTraceWithOptions('q++; q < 10 ? () : q', {
   maxSteps: 1000,
   timeoutMs: 100,
-  strict: true
+  strict: true,
+  randomSeed: 123
 });
 ```
 
-`maxSteps` limits interpreter token execution, including function argument evaluation. `timeoutMs` limits wall-clock runtime. `strict` reports unknown variables and function calls as errors instead of resolving them to `0`. The result includes `{ value, steps, runtimeMs, status, error }`, where `status` is `completed`, `timeout`, `step-limit`, or `error`.
+`maxSteps` limits interpreter token execution, including function argument evaluation. `timeoutMs` limits wall-clock runtime. `strict` reports unknown variables and function calls as errors instead of resolving them to `0`. `randomSeed` makes range, plusminus, and selection operations deterministic unless an explicit `rand` function is provided. The result includes `{ value, steps, runtimeMs, status, error }`, where `status` is `completed`, `timeout`, `step-limit`, or `error`.
 
 `runTraceWithOptions` and `Trace.runWithOptions` use isolated variables and functions by default. Pass `{ persist: true }` to reuse the `Trace` instance's globals across runs.
 

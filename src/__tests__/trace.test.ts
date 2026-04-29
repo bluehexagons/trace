@@ -275,4 +275,23 @@ describe('random operators', () => {
       expect(valid).toContain(v)
     }
   })
+
+  it('can use seeded randomness for deterministic runs', () => {
+    const script = '0~10'
+    const a = runTraceWithOptions(script, { randomSeed: 123 }).value
+    const b = runTraceWithOptions(script, { randomSeed: 123 }).value
+    const c = runTraceWithOptions(script, { randomSeed: 456 }).value
+
+    expect(a).toBe(b)
+    expect(c).not.toBe(a)
+  })
+
+  it('prefers an explicit rand function over randomSeed', () => {
+    const result = runTraceWithOptions('0~10', {
+      randomSeed: 123,
+      rand: () => 0.25
+    })
+
+    expect(result.value).toBe(2.5)
+  })
 })

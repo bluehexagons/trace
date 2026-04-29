@@ -60,6 +60,7 @@ export type TraceRunOptions = {
         [s: string]: number;
     };
     rand?: () => number;
+    randomSeed?: number;
     timeoutMs?: number;
     maxSteps?: number;
     persist?: boolean;

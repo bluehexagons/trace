@@ -275,6 +275,13 @@ for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.g
 }
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
 const isAssignmentStart = (kind) => kind === 37 /* TokenKind.set */;
+const createSeededRandom = (seed) => {
+    let state = seed >>> 0;
+    return () => {
+        state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+};
 const parseParamList = (source) => {
     const start = source.indexOf('(');
     const end = source.indexOf(')', start + 1);
@@ -934,9 +941,12 @@ export class Trace {
             steps: 0,
             status: 'completed'
         };
+        const rand = options.rand ?? (options.randomSeed === undefined
+            ? Math.random
+            : createSeededRandom(options.randomSeed));
         let value = null;
         try {
-            value = this.run(options.args ?? [], options.variables ?? null, vars, functions, options.rand ?? Math.random, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false);
+            value = this.run(options.args ?? [], options.variables ?? null, vars, functions, rand, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false);
         }
         catch (e) {
             context.status = 'error';

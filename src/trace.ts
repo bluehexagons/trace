@@ -297,6 +297,7 @@ export type TraceRunOptions = {
   args?: number[]
   variables?: {[s: string]: number}
   rand?: () => number
+  randomSeed?: number
   timeoutMs?: number
   maxSteps?: number
   persist?: boolean
@@ -322,6 +323,14 @@ type TraceRunContext = {
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/
 const isAssignmentStart = (kind: TokenKind | undefined) => kind === TokenKind.set
+
+const createSeededRandom = (seed: number) => {
+  let state = seed >>> 0
+  return () => {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0
+    return state / 0x100000000
+  }
+}
 
 const parseParamList = (source: string) => {
   const start = source.indexOf('(')
@@ -1069,6 +1078,11 @@ export class Trace {
       steps: 0,
       status: 'completed'
     }
+    const rand = options.rand ?? (
+      options.randomSeed === undefined
+        ? Math.random
+        : createSeededRandom(options.randomSeed)
+    )
 
     let value: number | null = null
 
@@ -1078,7 +1092,7 @@ export class Trace {
         options.variables ?? null,
         vars,
         functions,
-        options.rand ?? Math.random,
+        rand,
         options.timeoutMs ?? 1000,
         startedAt,
         options.maxSteps ?? Number.POSITIVE_INFINITY,
