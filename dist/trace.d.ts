@@ -53,6 +53,8 @@ type TraceToken = {
     kind: TokenKind;
     value: number;
     string: string;
+    parsedArgs?: Trace[];
+    parsedValues?: number[];
 };
 export type TraceRunOptions = {
     args?: number[];

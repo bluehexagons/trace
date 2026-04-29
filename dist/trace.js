@@ -344,7 +344,7 @@ const closeStatement = (f, vars) => {
     if (f.setVar === '') {
         return;
     }
-    const varVal = vars.has(f.setVar) ? vars.get(f.setVar) : 0;
+    const varVal = vars.get(f.setVar) ?? 0;
     switch (f.setOp) {
         case 37 /* TokenKind.set */:
             vars.set(f.setVar, f.value);
@@ -527,11 +527,21 @@ export class Trace {
                 findOperator = !findOperator;
             }
             // push the token
-            tokens.push({
+            const token = {
                 kind,
                 value: parseFloat(match[0]),
                 string: match[0]
-            });
+            };
+            if (kind === 5 /* TokenKind.literalArray */) {
+                token.parsedValues = match[0].split('|').map(parseFloat);
+            }
+            else if (kind === 11 /* TokenKind.functionCall */ || kind === 12 /* TokenKind.tailCall */) {
+                const callArgStrings = parseCallArgs(match[0]);
+                if (callArgStrings.length > 0) {
+                    token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg));
+                }
+            }
+            tokens.push(token);
             // see if parsing is done
             if (stringLeft.length === 0) {
                 // close all remaining parenthesis
@@ -545,7 +555,6 @@ export class Trace {
     }
     run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false) {
         const frames = [];
-        let split = [];
         let fn = '';
         let script = '';
         let tc = false;
@@ -577,20 +586,24 @@ export class Trace {
                 vars.set(v, +variables[v]);
             }
         }
+        let nextTimeoutCheck = context.steps + 1024;
         callStack: while (frames.length > 0) {
             f = frames.pop();
             for (; f.i < f.tokens.length; f.i++) {
                 const t = f.tokens[f.i];
                 let val = null;
-                if (performance.now() - context.startedAt > executionLimit) {
-                    this.errorLogger('Trace timed out');
-                    context.status = 'timeout';
-                    this.lastRunTime = performance.now() - context.startedAt;
-                    this.lastRunSteps = context.steps;
-                    this.lastRunStatus = context.status;
-                    return 0;
-                }
                 context.steps++;
+                if (context.steps >= nextTimeoutCheck) {
+                    nextTimeoutCheck = context.steps + 1024;
+                    if (performance.now() - context.startedAt > executionLimit) {
+                        this.errorLogger('Trace timed out');
+                        context.status = 'timeout';
+                        this.lastRunTime = performance.now() - context.startedAt;
+                        this.lastRunSteps = context.steps;
+                        this.lastRunStatus = context.status;
+                        return 0;
+                    }
+                }
                 if (context.steps > maxSteps) {
                     this.errorLogger('Trace exceeded step limit');
                     context.status = 'step-limit';
@@ -655,22 +668,23 @@ export class Trace {
                         if (strict && !vars.has(t.string) && !isAssignmentStart(f.tokens[f.i + 1]?.kind)) {
                             throw new Error(`Runtime error: unknown variable "${t.string}"`);
                         }
-                        val = vars.has(t.string) ? vars.get(t.string) : 0;
+                        val = vars.get(t.string) ?? 0;
                         f.lastVar = t.string;
                         break;
                     case 4 /* TokenKind.percent */:
                         if (strict && !vars.has('value')) {
                             throw new Error('Runtime error: unknown variable "value"');
                         }
-                        val = vars.has('value') ? vars.get('value') * (t.value * 0.01) : 0;
+                        val = (vars.get('value') ?? 0) * (t.value * 0.01);
                         break;
                     case 3 /* TokenKind.literal */:
                         val = t.value;
                         break;
-                    case 5 /* TokenKind.literalArray */:
-                        split = t.string.split('|');
-                        val = parseFloat(split[rand() * split.length | 0]);
+                    case 5 /* TokenKind.literalArray */: {
+                        const pv = t.parsedValues;
+                        val = pv[rand() * pv.length | 0];
                         break;
+                    }
                     case 14 /* TokenKind.function */:
                     case 16 /* TokenKind.lambda */:
                     case 13 /* TokenKind.aFunction */:
@@ -724,16 +738,16 @@ export class Trace {
                         fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('));
                         if (functions.has(fn)) {
                             const ms = functions.get(fn);
-                            const callArgs = parseCallArgs(t.string);
+                            const parsedArgs = t.parsedArgs;
                             for (let i = 0; i < ms.callParams.length; i++) {
                                 const param = ms.callParams[i];
                                 if (!paramNamePattern.test(param)) {
                                     throw new Error(`Syntax error: invalid function parameter "${param}"`);
                                 }
-                                const arg = callArgs[i];
-                                const argValue = arg === undefined
+                                const argTrace = parsedArgs?.[i];
+                                const argValue = argTrace === undefined
                                     ? 0
-                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict);
+                                    : argTrace.run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict);
                                 if (context.status !== 'completed') {
                                     this.lastRunTime = performance.now() - context.startedAt;
                                     this.lastRunSteps = context.steps;
@@ -776,12 +790,12 @@ export class Trace {
                         f.value = f.lastValue;
                         continue;
                     case 44 /* TokenKind.increment */:
-                        val = (vars.has(f.lastVar) ? vars.get(f.lastVar) : 0) + 1;
+                        val = (vars.get(f.lastVar) ?? 0) + 1;
                         vars.set(f.lastVar, val);
                         f.value = f.lastValue;
                         break;
                     case 45 /* TokenKind.decrement */:
-                        val = (vars.has(f.lastVar) ? vars.get(f.lastVar) : 0) - 1;
+                        val = (vars.get(f.lastVar) ?? 0) - 1;
                         vars.set(f.lastVar, val);
                         f.value = f.lastValue;
                         break;

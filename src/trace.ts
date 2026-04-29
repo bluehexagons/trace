@@ -291,7 +291,7 @@ for (const t of [TokenKind.gt, TokenKind.lt, TokenKind.gteq, TokenKind.lteq, Tok
   opLevels.set(t, 1)
 }
 
-type TraceToken = { kind: TokenKind, value: number, string: string }
+type TraceToken = { kind: TokenKind, value: number, string: string, parsedArgs?: Trace[], parsedValues?: number[] }
 
 export type TraceRunOptions = {
   args?: number[]
@@ -400,7 +400,7 @@ const closeStatement = (f: StackFrame, vars: Map<string, number>) => {
     return
   }
 
-  const varVal = vars.has(f.setVar) ? vars.get(f.setVar) as number : 0
+  const varVal = vars.get(f.setVar) ?? 0
 
   switch (f.setOp) {
   case TokenKind.set:
@@ -599,11 +599,20 @@ export class Trace {
       }
 
       // push the token
-      tokens.push({
+      const token: TraceToken = {
         kind,
         value: parseFloat(match[0]),
         string: match[0]
-      })
+      }
+      if (kind === TokenKind.literalArray) {
+        token.parsedValues = match[0].split('|').map(parseFloat)
+      } else if (kind === TokenKind.functionCall || kind === TokenKind.tailCall) {
+        const callArgStrings = parseCallArgs(match[0])
+        if (callArgStrings.length > 0) {
+          token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg))
+        }
+      }
+      tokens.push(token)
 
       // see if parsing is done
       if (stringLeft.length === 0) {
@@ -630,7 +639,6 @@ export class Trace {
     strict = false
   ) {
     const frames = [] as StackFrame[]
-    let split: string[] = []
     let fn = ''
     let script = ''
     let tc = false
@@ -669,6 +677,8 @@ export class Trace {
       }
     }
 
+    let nextTimeoutCheck = context.steps + 1024
+
     callStack:
     while (frames.length > 0) {
       f = frames.pop() as StackFrame
@@ -677,16 +687,18 @@ export class Trace {
         const t = f.tokens[f.i]
         let val: (number | null) = null
 
-        if (performance.now() - context.startedAt > executionLimit) {
-          this.errorLogger('Trace timed out')
-          context.status = 'timeout'
-          this.lastRunTime = performance.now() - context.startedAt
-          this.lastRunSteps = context.steps
-          this.lastRunStatus = context.status
-          return 0
-        }
-
         context.steps++
+        if (context.steps >= nextTimeoutCheck) {
+          nextTimeoutCheck = context.steps + 1024
+          if (performance.now() - context.startedAt > executionLimit) {
+            this.errorLogger('Trace timed out')
+            context.status = 'timeout'
+            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunSteps = context.steps
+            this.lastRunStatus = context.status
+            return 0
+          }
+        }
         if (context.steps > maxSteps) {
           this.errorLogger('Trace exceeded step limit')
           context.status = 'step-limit'
@@ -755,7 +767,7 @@ export class Trace {
           if (strict && !vars.has(t.string) && !isAssignmentStart(f.tokens[f.i + 1]?.kind)) {
             throw new Error(`Runtime error: unknown variable "${t.string}"`)
           }
-          val = vars.has(t.string) ? vars.get(t.string) as number : 0
+          val = vars.get(t.string) ?? 0
           f.lastVar = t.string
           break
 
@@ -763,17 +775,18 @@ export class Trace {
           if (strict && !vars.has('value')) {
             throw new Error('Runtime error: unknown variable "value"')
           }
-          val = vars.has('value') ? vars.get('value') as number * (t.value * 0.01) : 0
+          val = (vars.get('value') ?? 0) * (t.value * 0.01)
           break
 
         case TokenKind.literal:
           val = t.value
           break
 
-        case TokenKind.literalArray:
-          split = t.string.split('|')
-          val = parseFloat(split[rand() * split.length | 0])
+        case TokenKind.literalArray: {
+          const pv = t.parsedValues as number[]
+          val = pv[rand() * pv.length | 0]
           break
+        }
 
         case TokenKind.function:
         case TokenKind.lambda:
@@ -831,17 +844,17 @@ export class Trace {
           fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('))
           if (functions.has(fn)) {
             const ms = functions.get(fn) as Trace
-            const callArgs = parseCallArgs(t.string)
+            const parsedArgs = t.parsedArgs
             for (let i = 0; i < ms.callParams.length; i++) {
               const param = ms.callParams[i]
               if (!paramNamePattern.test(param)) {
                 throw new Error(`Syntax error: invalid function parameter "${param}"`)
               }
 
-              const arg = callArgs[i]
-              const argValue = arg === undefined
+              const argTrace = parsedArgs?.[i]
+              const argValue = argTrace === undefined
                 ? 0
-                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict)
+                : argTrace.run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict)
               if (context.status !== 'completed') {
                 this.lastRunTime = performance.now() - context.startedAt
                 this.lastRunSteps = context.steps
@@ -885,13 +898,13 @@ export class Trace {
           continue
 
         case TokenKind.increment:
-          val = (vars.has(f.lastVar) ? vars.get(f.lastVar) as number : 0) + 1
+          val = (vars.get(f.lastVar) ?? 0) + 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
           break
 
         case TokenKind.decrement:
-          val = (vars.has(f.lastVar) ? vars.get(f.lastVar) as number : 0) - 1
+          val = (vars.get(f.lastVar) ?? 0) - 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
           break
