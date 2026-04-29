@@ -164,6 +164,30 @@ describe('execution limits', () => {
     expect(script.runWithOptions({ persist: true }).value).toBe(1)
     expect(script.runWithOptions({ persist: true }).value).toBe(2)
   })
+
+  it('can report unknown variables in strict mode', () => {
+    const result = runTraceWithOptions('score + 1', { strict: true })
+    expect(result.value).toBeNull()
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('unknown variable "score"')
+  })
+
+  it('allows assignments in strict mode', () => {
+    const result = runTraceWithOptions('score = 10; score + 1', { strict: true })
+    expect(result.value).toBe(11)
+    expect(result.status).toBe('completed')
+  })
+
+  it('can report unknown functions in strict mode', () => {
+    const result = runTraceWithOptions('missing()', { strict: true })
+    expect(result.value).toBeNull()
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('unknown function "missing"')
+  })
+
+  it('keeps permissive unknown variable behavior by default', () => {
+    expect(runTraceWithOptions('score + 1').value).toBe(1)
+  })
 })
 
 describe('script parameters', () => {

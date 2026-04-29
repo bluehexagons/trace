@@ -300,24 +300,28 @@ export type TraceRunOptions = {
   timeoutMs?: number
   maxSteps?: number
   persist?: boolean
+  strict?: boolean
 }
 
-export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit'
+export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit' | 'error'
 
 export type TraceRunResult = {
   value: number | null
   steps: number
   runtimeMs: number
   status: TraceRunStatus
+  error?: string
 }
 
 type TraceRunContext = {
   startedAt: number
   steps: number
   status: TraceRunStatus
+  error?: string
 }
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/
+const isAssignmentStart = (kind: TokenKind | undefined) => kind === TokenKind.set
 
 const parseParamList = (source: string) => {
   const start = source.indexOf('(')
@@ -615,7 +619,8 @@ export class Trace {
     executionLimit = 1000,
     executionStart: number = performance.now(),
     maxSteps = Number.POSITIVE_INFINITY,
-    context: TraceRunContext = { startedAt: executionStart, steps: 0, status: 'completed' }
+    context: TraceRunContext = { startedAt: executionStart, steps: 0, status: 'completed' },
+    strict = false
   ) {
     const frames = [] as StackFrame[]
     let split: string[] = []
@@ -739,11 +744,17 @@ export class Trace {
           break
 
         case TokenKind.variable:
+          if (strict && !vars.has(t.string) && !isAssignmentStart(f.tokens[f.i + 1]?.kind)) {
+            throw new Error(`Runtime error: unknown variable "${t.string}"`)
+          }
           val = vars.has(t.string) ? vars.get(t.string) as number : 0
           f.lastVar = t.string
           break
 
         case TokenKind.percent:
+          if (strict && !vars.has('value')) {
+            throw new Error('Runtime error: unknown variable "value"')
+          }
           val = vars.has('value') ? vars.get('value') as number * (t.value * 0.01) : 0
           break
 
@@ -822,7 +833,7 @@ export class Trace {
               const arg = callArgs[i]
               const argValue = arg === undefined
                 ? 0
-                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context)
+                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict)
               if (context.status !== 'completed') {
                 this.lastRunTime = performance.now() - context.startedAt
                 this.lastRunSteps = context.steps
@@ -845,6 +856,9 @@ export class Trace {
             }
             frames.push(sf)
             continue callStack
+          }
+          if (strict) {
+            throw new Error(`Runtime error: unknown function "${fn}"`)
           }
           val = 0
           break
@@ -1056,23 +1070,35 @@ export class Trace {
       status: 'completed'
     }
 
-    const value = this.run(
-      options.args ?? [],
-      options.variables ?? null,
-      vars,
-      functions,
-      options.rand ?? Math.random,
-      options.timeoutMs ?? 1000,
-      startedAt,
-      options.maxSteps ?? Number.POSITIVE_INFINITY,
-      context
-    )
+    let value: number | null = null
+
+    try {
+      value = this.run(
+        options.args ?? [],
+        options.variables ?? null,
+        vars,
+        functions,
+        options.rand ?? Math.random,
+        options.timeoutMs ?? 1000,
+        startedAt,
+        options.maxSteps ?? Number.POSITIVE_INFINITY,
+        context,
+        options.strict ?? false
+      )
+    } catch (e) {
+      context.status = 'error'
+      context.error = e instanceof Error ? e.message : String(e)
+      this.lastRunTime = performance.now() - context.startedAt
+      this.lastRunSteps = context.steps
+      this.lastRunStatus = context.status
+    }
 
     return {
       value,
       steps: this.lastRunSteps,
       runtimeMs: this.lastRunTime,
-      status: this.lastRunStatus
+      status: this.lastRunStatus,
+      error: context.error
     }
   }
 }

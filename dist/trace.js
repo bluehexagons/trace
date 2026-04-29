@@ -274,6 +274,7 @@ for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.g
     opLevels.set(t, 1);
 }
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
+const isAssignmentStart = (kind) => kind === 37 /* TokenKind.set */;
 const parseParamList = (source) => {
     const start = source.indexOf('(');
     const end = source.indexOf(')', start + 1);
@@ -536,7 +537,7 @@ export class Trace {
             }
         }
     }
-    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }) {
+    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false) {
         const frames = [];
         let split = [];
         let fn = '';
@@ -644,10 +645,16 @@ export class Trace {
                         }
                         break;
                     case 1 /* TokenKind.variable */:
+                        if (strict && !vars.has(t.string) && !isAssignmentStart(f.tokens[f.i + 1]?.kind)) {
+                            throw new Error(`Runtime error: unknown variable "${t.string}"`);
+                        }
                         val = vars.has(t.string) ? vars.get(t.string) : 0;
                         f.lastVar = t.string;
                         break;
                     case 4 /* TokenKind.percent */:
+                        if (strict && !vars.has('value')) {
+                            throw new Error('Runtime error: unknown variable "value"');
+                        }
                         val = vars.has('value') ? vars.get('value') * (t.value * 0.01) : 0;
                         break;
                     case 3 /* TokenKind.literal */:
@@ -719,7 +726,7 @@ export class Trace {
                                 const arg = callArgs[i];
                                 const argValue = arg === undefined
                                     ? 0
-                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context);
+                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context, strict);
                                 if (context.status !== 'completed') {
                                     this.lastRunTime = performance.now() - context.startedAt;
                                     this.lastRunSteps = context.steps;
@@ -743,6 +750,9 @@ export class Trace {
                             }
                             frames.push(sf);
                             continue callStack;
+                        }
+                        if (strict) {
+                            throw new Error(`Runtime error: unknown function "${fn}"`);
                         }
                         val = 0;
                         break;
@@ -924,12 +934,23 @@ export class Trace {
             steps: 0,
             status: 'completed'
         };
-        const value = this.run(options.args ?? [], options.variables ?? null, vars, functions, options.rand ?? Math.random, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context);
+        let value = null;
+        try {
+            value = this.run(options.args ?? [], options.variables ?? null, vars, functions, options.rand ?? Math.random, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false);
+        }
+        catch (e) {
+            context.status = 'error';
+            context.error = e instanceof Error ? e.message : String(e);
+            this.lastRunTime = performance.now() - context.startedAt;
+            this.lastRunSteps = context.steps;
+            this.lastRunStatus = context.status;
+        }
         return {
             value,
             steps: this.lastRunSteps,
             runtimeMs: this.lastRunTime,
-            status: this.lastRunStatus
+            status: this.lastRunStatus,
+            error: context.error
         };
     }
 }
