@@ -97,11 +97,11 @@ const operands = [
     kind: TokenKind.lambda
   },
   {
-    regex: /^(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
+    regex: /^(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
     kind: TokenKind.functionCall
   },
   {
-    regex: /^>(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
+    regex: /^>(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
     kind: TokenKind.tailCall
   },
   {
@@ -299,12 +299,22 @@ export type TraceRunOptions = {
   rand?: () => number
   timeoutMs?: number
   maxSteps?: number
+  persist?: boolean
 }
+
+export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit'
 
 export type TraceRunResult = {
   value: number | null
   steps: number
   runtimeMs: number
+  status: TraceRunStatus
+}
+
+type TraceRunContext = {
+  startedAt: number
+  steps: number
+  status: TraceRunStatus
 }
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/
@@ -330,11 +340,25 @@ const parseCallArgs = (source: string) => {
     return []
   }
 
-  return source
-    .substring(start + 1, end)
-    .split(',')
-    .map((arg) => arg.trim())
-    .filter((arg) => arg.length > 0)
+  const args: string[] = []
+  const argSource = source.substring(start + 1, end)
+  let groupLevel = 0
+  let argStart = 0
+
+  for (let i = 0; i < argSource.length; i++) {
+    const char = argSource[i]
+    if (char === '(') {
+      groupLevel++
+    } else if (char === ')') {
+      groupLevel--
+    } else if (char === ',' && groupLevel === 0) {
+      args.push(argSource.substring(argStart, i).trim())
+      argStart = i + 1
+    }
+  }
+
+  args.push(argSource.substring(argStart).trim())
+  return args.filter((arg) => arg.length > 0)
 }
 
 class StackFrame {
@@ -422,6 +446,7 @@ export class Trace {
 
   lastRunTime = 0
   lastRunSteps = 0
+  lastRunStatus: TraceRunStatus = 'completed'
   callParams: string[] = []
   vars: (Map<string, number> | null) = null
   functions: (Map<string, Trace> | null) = null
@@ -589,7 +614,8 @@ export class Trace {
     rand: () => number = Math.random,
     executionLimit = 1000,
     executionStart: number = performance.now(),
-    maxSteps = Number.POSITIVE_INFINITY
+    maxSteps = Number.POSITIVE_INFINITY,
+    context: TraceRunContext = { startedAt: executionStart, steps: 0, status: 'completed' }
   ) {
     const frames = [] as StackFrame[]
     let split: string[] = []
@@ -597,7 +623,6 @@ export class Trace {
     let script = ''
     let tc = false
     let value: (number | null) = null
-    let steps = 0
     let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize
     let f: StackFrame = new StackFrame(this.tokens, stackSize)
     let stack = f.stack as Float64Array
@@ -640,18 +665,22 @@ export class Trace {
         const t = f.tokens[f.i]
         let val: (number | null) = null
 
-        if (performance.now() - executionStart > executionLimit) {
+        if (performance.now() - context.startedAt > executionLimit) {
           this.errorLogger('Trace timed out')
-          this.lastRunTime = performance.now() - executionStart
-          this.lastRunSteps = steps
+          context.status = 'timeout'
+          this.lastRunTime = performance.now() - context.startedAt
+          this.lastRunSteps = context.steps
+          this.lastRunStatus = context.status
           return 0
         }
 
-        steps++
-        if (steps > maxSteps) {
+        context.steps++
+        if (context.steps > maxSteps) {
           this.errorLogger('Trace exceeded step limit')
-          this.lastRunTime = performance.now() - executionStart
-          this.lastRunSteps = steps
+          context.status = 'step-limit'
+          this.lastRunTime = performance.now() - context.startedAt
+          this.lastRunSteps = context.steps
+          this.lastRunStatus = context.status
           return 0
         }
 
@@ -793,7 +822,13 @@ export class Trace {
               const arg = callArgs[i]
               const argValue = arg === undefined
                 ? 0
-                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, executionStart, maxSteps)
+                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context)
+              if (context.status !== 'completed') {
+                this.lastRunTime = performance.now() - context.startedAt
+                this.lastRunSteps = context.steps
+                this.lastRunStatus = context.status
+                return 0
+              }
               vars.set(param, +(argValue ?? 0))
             }
             if (!tc) {
@@ -1005,27 +1040,39 @@ export class Trace {
       value = f.value
     }
 
-    this.lastRunTime = performance.now() - executionStart
-    this.lastRunSteps = steps
+    this.lastRunTime = performance.now() - context.startedAt
+    this.lastRunSteps = context.steps
+    this.lastRunStatus = context.status
     return value
   }
 
   runWithOptions(options: TraceRunOptions = {}): TraceRunResult {
+    const vars = options.persist ? null : new Map<string, number>()
+    const functions = options.persist ? null : new Map(stdlib)
+    const startedAt = performance.now()
+    const context: TraceRunContext = {
+      startedAt,
+      steps: 0,
+      status: 'completed'
+    }
+
     const value = this.run(
       options.args ?? [],
       options.variables ?? null,
-      null,
-      null,
+      vars,
+      functions,
       options.rand ?? Math.random,
       options.timeoutMs ?? 1000,
-      performance.now(),
-      options.maxSteps ?? Number.POSITIVE_INFINITY
+      startedAt,
+      options.maxSteps ?? Number.POSITIVE_INFINITY,
+      context
     )
 
     return {
       value,
       steps: this.lastRunSteps,
-      runtimeMs: this.lastRunTime
+      runtimeMs: this.lastRunTime,
+      status: this.lastRunStatus
     }
   }
 }

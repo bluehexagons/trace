@@ -62,11 +62,19 @@ export type TraceRunOptions = {
     rand?: () => number;
     timeoutMs?: number;
     maxSteps?: number;
+    persist?: boolean;
 };
+export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit';
 export type TraceRunResult = {
     value: number | null;
     steps: number;
     runtimeMs: number;
+    status: TraceRunStatus;
+};
+type TraceRunContext = {
+    startedAt: number;
+    steps: number;
+    status: TraceRunStatus;
 };
 export declare class Trace {
     body: string;
@@ -79,6 +87,7 @@ export declare class Trace {
     errorLogger: (...data: any[]) => void;
     lastRunTime: number;
     lastRunSteps: number;
+    lastRunStatus: TraceRunStatus;
     callParams: string[];
     vars: (Map<string, number> | null);
     functions: (Map<string, Trace> | null);
@@ -86,7 +95,7 @@ export declare class Trace {
     static parse(s: string): Trace;
     run(args?: number[], variables?: ({
         [s: string]: number;
-    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number): number | null;
+    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext): number | null;
     runWithOptions(options?: TraceRunOptions): TraceRunResult;
 }
 export declare const runTrace: (script: string, ...args: number[]) => number | null;

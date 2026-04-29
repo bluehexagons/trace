@@ -111,6 +111,10 @@ describe('functions', () => {
     expect(runTrace('add(a,b)=>{a+b}; base=2; add(base+3,4*5)')).toBe(25)
   })
 
+  it('supports function calls inside function arguments', () => {
+    expect(runTrace('inc(x)=>{x+1}; add(a,b)=>{a+b}; add(inc(2), inc(3))')).toBe(7)
+  })
+
   it('missing function arguments default to zero', () => {
     expect(runTrace('add(a,b)=>{a+b}; add(7)')).toBe(7)
   })
@@ -126,6 +130,7 @@ describe('execution limits', () => {
     expect(result.value).toBe(3)
     expect(result.steps).toBeGreaterThan(0)
     expect(result.runtimeMs).toBeGreaterThanOrEqual(0)
+    expect(result.status).toBe('completed')
   })
 
   it('can stop execution after a step budget is exceeded', () => {
@@ -135,6 +140,29 @@ describe('execution limits', () => {
     const result = script.runWithOptions({ maxSteps: 5 })
     expect(result.value).toBe(0)
     expect(result.steps).toBeGreaterThan(5)
+    expect(result.status).toBe('step-limit')
+  })
+
+  it('shares the step budget with function argument expressions', () => {
+    const script = Trace.parse('loop()=>{q++; >loop()}; id(v)=>{v}; id(loop())')
+    script.errorLogger = () => {}
+
+    const result = script.runWithOptions({ maxSteps: 10 })
+    expect(result.value).toBe(0)
+    expect(result.steps).toBeGreaterThan(10)
+    expect(result.status).toBe('step-limit')
+  })
+
+  it('runs with isolated state by default', () => {
+    const script = Trace.parse('x++; x')
+    expect(script.runWithOptions().value).toBe(1)
+    expect(script.runWithOptions().value).toBe(1)
+  })
+
+  it('can persist state when requested', () => {
+    const script = Trace.parse('x++; x')
+    expect(script.runWithOptions({ persist: true }).value).toBe(1)
+    expect(script.runWithOptions({ persist: true }).value).toBe(2)
   })
 })
 

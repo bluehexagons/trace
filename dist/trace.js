@@ -87,11 +87,11 @@ const operands = [
         kind: 16 /* TokenKind.lambda */
     },
     {
-        regex: /^(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
+        regex: /^(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
         kind: 11 /* TokenKind.functionCall */
     },
     {
-        regex: /^>(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
+        regex: /^>(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
         kind: 12 /* TokenKind.tailCall */
     },
     {
@@ -292,11 +292,25 @@ const parseCallArgs = (source) => {
     if (start === -1 || end === -1 || end === start + 1) {
         return [];
     }
-    return source
-        .substring(start + 1, end)
-        .split(',')
-        .map((arg) => arg.trim())
-        .filter((arg) => arg.length > 0);
+    const args = [];
+    const argSource = source.substring(start + 1, end);
+    let groupLevel = 0;
+    let argStart = 0;
+    for (let i = 0; i < argSource.length; i++) {
+        const char = argSource[i];
+        if (char === '(') {
+            groupLevel++;
+        }
+        else if (char === ')') {
+            groupLevel--;
+        }
+        else if (char === ',' && groupLevel === 0) {
+            args.push(argSource.substring(argStart, i).trim());
+            argStart = i + 1;
+        }
+    }
+    args.push(argSource.substring(argStart).trim());
+    return args.filter((arg) => arg.length > 0);
 };
 class StackFrame {
     stack;
@@ -372,6 +386,7 @@ export class Trace {
     errorLogger = Trace.errorLogger;
     lastRunTime = 0;
     lastRunSteps = 0;
+    lastRunStatus = 'completed';
     callParams = [];
     vars = null;
     functions = null;
@@ -521,14 +536,13 @@ export class Trace {
             }
         }
     }
-    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY) {
+    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }) {
         const frames = [];
         let split = [];
         let fn = '';
         let script = '';
         let tc = false;
         let value = null;
-        let steps = 0;
         let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize;
         let f = new StackFrame(this.tokens, stackSize);
         let stack = f.stack;
@@ -561,17 +575,21 @@ export class Trace {
             for (; f.i < f.tokens.length; f.i++) {
                 const t = f.tokens[f.i];
                 let val = null;
-                if (performance.now() - executionStart > executionLimit) {
+                if (performance.now() - context.startedAt > executionLimit) {
                     this.errorLogger('Trace timed out');
-                    this.lastRunTime = performance.now() - executionStart;
-                    this.lastRunSteps = steps;
+                    context.status = 'timeout';
+                    this.lastRunTime = performance.now() - context.startedAt;
+                    this.lastRunSteps = context.steps;
+                    this.lastRunStatus = context.status;
                     return 0;
                 }
-                steps++;
-                if (steps > maxSteps) {
+                context.steps++;
+                if (context.steps > maxSteps) {
                     this.errorLogger('Trace exceeded step limit');
-                    this.lastRunTime = performance.now() - executionStart;
-                    this.lastRunSteps = steps;
+                    context.status = 'step-limit';
+                    this.lastRunTime = performance.now() - context.startedAt;
+                    this.lastRunSteps = context.steps;
+                    this.lastRunStatus = context.status;
                     return 0;
                 }
                 switch (t.kind) {
@@ -701,7 +719,13 @@ export class Trace {
                                 const arg = callArgs[i];
                                 const argValue = arg === undefined
                                     ? 0
-                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, executionStart, maxSteps);
+                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, context.startedAt, maxSteps, context);
+                                if (context.status !== 'completed') {
+                                    this.lastRunTime = performance.now() - context.startedAt;
+                                    this.lastRunSteps = context.steps;
+                                    this.lastRunStatus = context.status;
+                                    return 0;
+                                }
                                 vars.set(param, +(argValue ?? 0));
                             }
                             if (!tc) {
@@ -886,16 +910,26 @@ export class Trace {
             closeStatement(f, vars);
             value = f.value;
         }
-        this.lastRunTime = performance.now() - executionStart;
-        this.lastRunSteps = steps;
+        this.lastRunTime = performance.now() - context.startedAt;
+        this.lastRunSteps = context.steps;
+        this.lastRunStatus = context.status;
         return value;
     }
     runWithOptions(options = {}) {
-        const value = this.run(options.args ?? [], options.variables ?? null, null, null, options.rand ?? Math.random, options.timeoutMs ?? 1000, performance.now(), options.maxSteps ?? Number.POSITIVE_INFINITY);
+        const vars = options.persist ? null : new Map();
+        const functions = options.persist ? null : new Map(stdlib);
+        const startedAt = performance.now();
+        const context = {
+            startedAt,
+            steps: 0,
+            status: 'completed'
+        };
+        const value = this.run(options.args ?? [], options.variables ?? null, vars, functions, options.rand ?? Math.random, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context);
         return {
             value,
             steps: this.lastRunSteps,
-            runtimeMs: this.lastRunTime
+            runtimeMs: this.lastRunTime,
+            status: this.lastRunStatus
         };
     }
 }
