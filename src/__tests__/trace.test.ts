@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runTrace, Trace } from '../index.js'
+import { runTrace, runTraceWithOptions, Trace } from '../index.js'
 
 describe('runTrace', () => {
   it('evaluates simple addition', () => {
@@ -101,6 +101,40 @@ describe('functions', () => {
 
   it('anonymous lambda result plus literal', () => {
     expect(runTrace('() => i++ < 10 ? >() : i; + 15')).toBe(25)
+  })
+
+  it('supports named function parameters as globals', () => {
+    expect(runTrace('add(a,b)=>{a+b}; add(2,3)')).toBe(5)
+  })
+
+  it('evaluates function argument expressions before assignment', () => {
+    expect(runTrace('add(a,b)=>{a+b}; base=2; add(base+3,4*5)')).toBe(25)
+  })
+
+  it('missing function arguments default to zero', () => {
+    expect(runTrace('add(a,b)=>{a+b}; add(7)')).toBe(7)
+  })
+
+  it('function parameters intentionally write to global variables', () => {
+    expect(runTrace('setX(x)=>{x+1}; x=2; setX(10); x')).toBe(10)
+  })
+})
+
+describe('execution limits', () => {
+  it('returns structured run metadata', () => {
+    const result = runTraceWithOptions('1 + 2', { maxSteps: 10 })
+    expect(result.value).toBe(3)
+    expect(result.steps).toBeGreaterThan(0)
+    expect(result.runtimeMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('can stop execution after a step budget is exceeded', () => {
+    const script = Trace.parse('q++; q < 10 ? () : q')
+    script.errorLogger = () => {}
+
+    const result = script.runWithOptions({ maxSteps: 5 })
+    expect(result.value).toBe(0)
+    expect(result.steps).toBeGreaterThan(5)
   })
 })
 

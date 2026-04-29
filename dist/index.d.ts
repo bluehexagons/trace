@@ -1,2 +1,3 @@
-export { Trace, runTrace } from './trace.js';
+export { Trace, runTrace, runTraceWithOptions } from './trace.js';
+export type { TraceRunOptions, TraceRunResult } from './trace.js';
 //# sourceMappingURL=index.d.ts.map

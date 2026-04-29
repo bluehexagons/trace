@@ -81,27 +81,27 @@ const operands = [
     kind: TokenKind.not
   },
   {
-    regex: /^\(\)=>\{[^}]*\}/,
+    regex: /^\([^)]*\)=>\{[^}]*\}/,
     kind: TokenKind.aFunction
   },
   {
-    regex: /^\(\)=>[^;]*;?/,
+    regex: /^\([^)]*\)=>[^;]*;?/,
     kind: TokenKind.aLambda
   },
   {
-    regex: /^[a-zA-Z_][\w.]*\(\)=>\{[^}]*\}/,
+    regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>\{[^}]*\}/,
     kind: TokenKind.function
   },
   {
-    regex: /^[a-zA-Z_][\w.]*\(\)=>[^;]*;?/,
+    regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>[^;]*;?/,
     kind: TokenKind.lambda
   },
   {
-    regex: /^([a-zA-Z_][\w.]*)?\(\)/,
+    regex: /^(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
     kind: TokenKind.functionCall
   },
   {
-    regex: /^>([a-zA-Z_][\w.]*)?\(\)/,
+    regex: /^>(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
     kind: TokenKind.tailCall
   },
   {
@@ -293,6 +293,50 @@ for (const t of [TokenKind.gt, TokenKind.lt, TokenKind.gteq, TokenKind.lteq, Tok
 
 type TraceToken = { kind: TokenKind, value: number, string: string }
 
+export type TraceRunOptions = {
+  args?: number[]
+  variables?: {[s: string]: number}
+  rand?: () => number
+  timeoutMs?: number
+  maxSteps?: number
+}
+
+export type TraceRunResult = {
+  value: number | null
+  steps: number
+  runtimeMs: number
+}
+
+const paramNamePattern = /^[a-zA-Z_][\w.]*$/
+
+const parseParamList = (source: string) => {
+  const start = source.indexOf('(')
+  const end = source.indexOf(')', start + 1)
+  if (start === -1 || end === -1 || end === start + 1) {
+    return []
+  }
+
+  return source
+    .substring(start + 1, end)
+    .split(',')
+    .map((param) => param.trim())
+    .filter((param) => param.length > 0)
+}
+
+const parseCallArgs = (source: string) => {
+  const start = source.indexOf('(')
+  const end = source.lastIndexOf(')')
+  if (start === -1 || end === -1 || end === start + 1) {
+    return []
+  }
+
+  return source
+    .substring(start + 1, end)
+    .split(',')
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0)
+}
+
 class StackFrame {
   stack: (Float64Array | null)
   tokens: TraceToken[]
@@ -377,6 +421,8 @@ export class Trace {
   errorLogger = Trace.errorLogger
 
   lastRunTime = 0
+  lastRunSteps = 0
+  callParams: string[] = []
   vars: (Map<string, number> | null) = null
   functions: (Map<string, Trace> | null) = null
 
@@ -542,7 +588,8 @@ export class Trace {
     functions: (Map<string, Trace> | null) = null,
     rand: () => number = Math.random,
     executionLimit = 1000,
-    executionStart: number = performance.now()
+    executionStart: number = performance.now(),
+    maxSteps = Number.POSITIVE_INFINITY
   ) {
     const frames = [] as StackFrame[]
     let split: string[] = []
@@ -550,6 +597,7 @@ export class Trace {
     let script = ''
     let tc = false
     let value: (number | null) = null
+    let steps = 0
     let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize
     let f: StackFrame = new StackFrame(this.tokens, stackSize)
     let stack = f.stack as Float64Array
@@ -595,6 +643,15 @@ export class Trace {
         if (performance.now() - executionStart > executionLimit) {
           this.errorLogger('Trace timed out')
           this.lastRunTime = performance.now() - executionStart
+          this.lastRunSteps = steps
+          return 0
+        }
+
+        steps++
+        if (steps > maxSteps) {
+          this.errorLogger('Trace exceeded step limit')
+          this.lastRunTime = performance.now() - executionStart
+          this.lastRunSteps = steps
           return 0
         }
 
@@ -685,6 +742,7 @@ export class Trace {
           }
 
           fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('))
+          const callParams = parseParamList(t.string)
           if (t.kind === TokenKind.function || t.kind === TokenKind.aFunction) {
             script = t.string.substring(t.string.indexOf('{') + 1, t.string.length - 1)
           } else {
@@ -693,7 +751,9 @@ export class Trace {
 
           if (fn !== '') {
             // named function
-            functions.set(fn, Trace.parse(script))
+            const ms = Trace.parse(script)
+            ms.callParams = callParams
+            functions.set(fn, ms)
             break
           }
 
@@ -723,6 +783,19 @@ export class Trace {
           fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('))
           if (functions.has(fn)) {
             const ms = functions.get(fn) as Trace
+            const callArgs = parseCallArgs(t.string)
+            for (let i = 0; i < ms.callParams.length; i++) {
+              const param = ms.callParams[i]
+              if (!paramNamePattern.test(param)) {
+                throw new Error(`Syntax error: invalid function parameter "${param}"`)
+              }
+
+              const arg = callArgs[i]
+              const argValue = arg === undefined
+                ? 0
+                : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, executionStart, maxSteps)
+              vars.set(param, +(argValue ?? 0))
+            }
             if (!tc) {
               frames.push(f)
             }
@@ -933,10 +1006,34 @@ export class Trace {
     }
 
     this.lastRunTime = performance.now() - executionStart
+    this.lastRunSteps = steps
     return value
+  }
+
+  runWithOptions(options: TraceRunOptions = {}): TraceRunResult {
+    const value = this.run(
+      options.args ?? [],
+      options.variables ?? null,
+      null,
+      null,
+      options.rand ?? Math.random,
+      options.timeoutMs ?? 1000,
+      performance.now(),
+      options.maxSteps ?? Number.POSITIVE_INFINITY
+    )
+
+    return {
+      value,
+      steps: this.lastRunSteps,
+      runtimeMs: this.lastRunTime
+    }
   }
 }
 
 export const runTrace = (script: string, ...args: number[]) => {
   return Trace.parse(script).run(args)
+}
+
+export const runTraceWithOptions = (script: string, options: TraceRunOptions = {}) => {
+  return Trace.parse(script).runWithOptions(options)
 }

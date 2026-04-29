@@ -27,7 +27,7 @@ npm install ../trace
 ### JavaScript/Node.js (ESM)
 
 ```javascript
-import { runTrace, Trace } from 'trace';
+import { runTrace, runTraceWithOptions, Trace } from 'trace';
 
 // Quick execution
 const result = runTrace('1 + 10');
@@ -78,6 +78,13 @@ console.log(output); // 10
 // Passing arguments to scripts
 const sum = runTrace('[...] t = 0; i = 1; &0 > 0 ? ()=>{t += &i; i++ <= &0 ? () : t}', 1, 2, 3, 4);
 console.log(sum); // 10
+
+// Structured execution with explicit safety limits
+const result = runTraceWithOptions('q++; q < 10 ? () : q', {
+  maxSteps: 1000,
+  timeoutMs: 100
+});
+console.log(result.value, result.steps, result.runtimeMs);
 ```
 
 ## Building
@@ -177,7 +184,15 @@ lambdas
 
 call functions like `name()`
 
-parameters aren't supported... yet?
+function parameters are supported as syntactic sugar over globals:
+
+```
+add(a, b) => { a + b };
+add(2, 3)
+> 5
+```
+
+Argument expressions are evaluated before the function body. Parameter names are then assigned as global variables, so calling `setX(x)` will overwrite the global `x`. Missing arguments default to `0`.
 
 end statements with `;` or `,`
 
@@ -221,6 +236,19 @@ calls currently-running function body again (including main script)
 
 running a tail call obliterates the current stack frame
 can include tailcall `>` anywhere a function is being run
+
+# execution limits
+
+Use `runTraceWithOptions` or `Trace.runWithOptions` to run code with explicit limits and structured metadata:
+
+```typescript
+const result = runTraceWithOptions('q++; q < 10 ? () : q', {
+  maxSteps: 1000,
+  timeoutMs: 100
+});
+```
+
+`maxSteps` limits interpreter token execution. `timeoutMs` limits wall-clock runtime. The result includes `{ value, steps, runtimeMs }`.
 
 # echo
 

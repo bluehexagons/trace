@@ -54,6 +54,20 @@ type TraceToken = {
     value: number;
     string: string;
 };
+export type TraceRunOptions = {
+    args?: number[];
+    variables?: {
+        [s: string]: number;
+    };
+    rand?: () => number;
+    timeoutMs?: number;
+    maxSteps?: number;
+};
+export type TraceRunResult = {
+    value: number | null;
+    steps: number;
+    runtimeMs: number;
+};
 export declare class Trace {
     body: string;
     tokens: TraceToken[];
@@ -64,14 +78,18 @@ export declare class Trace {
     logger: (...data: any[]) => void;
     errorLogger: (...data: any[]) => void;
     lastRunTime: number;
+    lastRunSteps: number;
+    callParams: string[];
     vars: (Map<string, number> | null);
     functions: (Map<string, Trace> | null);
     constructor(body: string, tokens: TraceToken[], params: string[], stackSize: number);
     static parse(s: string): Trace;
     run(args?: number[], variables?: ({
         [s: string]: number;
-    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), rand?: () => number, executionLimit?: number, executionStart?: number): number | null;
+    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number): number | null;
+    runWithOptions(options?: TraceRunOptions): TraceRunResult;
 }
 export declare const runTrace: (script: string, ...args: number[]) => number | null;
+export declare const runTraceWithOptions: (script: string, options?: TraceRunOptions) => TraceRunResult;
 export {};
 //# sourceMappingURL=trace.d.ts.map

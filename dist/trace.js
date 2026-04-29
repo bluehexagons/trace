@@ -71,27 +71,27 @@ const operands = [
         kind: 7 /* TokenKind.not */
     },
     {
-        regex: /^\(\)=>\{[^}]*\}/,
+        regex: /^\([^)]*\)=>\{[^}]*\}/,
         kind: 13 /* TokenKind.aFunction */
     },
     {
-        regex: /^\(\)=>[^;]*;?/,
+        regex: /^\([^)]*\)=>[^;]*;?/,
         kind: 15 /* TokenKind.aLambda */
     },
     {
-        regex: /^[a-zA-Z_][\w.]*\(\)=>\{[^}]*\}/,
+        regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>\{[^}]*\}/,
         kind: 14 /* TokenKind.function */
     },
     {
-        regex: /^[a-zA-Z_][\w.]*\(\)=>[^;]*;?/,
+        regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>[^;]*;?/,
         kind: 16 /* TokenKind.lambda */
     },
     {
-        regex: /^([a-zA-Z_][\w.]*)?\(\)/,
+        regex: /^(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
         kind: 11 /* TokenKind.functionCall */
     },
     {
-        regex: /^>([a-zA-Z_][\w.]*)?\(\)/,
+        regex: /^>(?:[a-zA-Z_][\w.]*\([^(){};]*\)|\(\))/,
         kind: 12 /* TokenKind.tailCall */
     },
     {
@@ -273,6 +273,31 @@ for (const t of [17 /* TokenKind.add */, 18 /* TokenKind.sub */]) {
 for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.gteq */, 27 /* TokenKind.lteq */, 28 /* TokenKind.eq */, 29 /* TokenKind.neq */]) {
     opLevels.set(t, 1);
 }
+const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
+const parseParamList = (source) => {
+    const start = source.indexOf('(');
+    const end = source.indexOf(')', start + 1);
+    if (start === -1 || end === -1 || end === start + 1) {
+        return [];
+    }
+    return source
+        .substring(start + 1, end)
+        .split(',')
+        .map((param) => param.trim())
+        .filter((param) => param.length > 0);
+};
+const parseCallArgs = (source) => {
+    const start = source.indexOf('(');
+    const end = source.lastIndexOf(')');
+    if (start === -1 || end === -1 || end === start + 1) {
+        return [];
+    }
+    return source
+        .substring(start + 1, end)
+        .split(',')
+        .map((arg) => arg.trim())
+        .filter((arg) => arg.length > 0);
+};
 class StackFrame {
     stack;
     tokens;
@@ -346,6 +371,8 @@ export class Trace {
     logger = Trace.logger;
     errorLogger = Trace.errorLogger;
     lastRunTime = 0;
+    lastRunSteps = 0;
+    callParams = [];
     vars = null;
     functions = null;
     constructor(body, tokens, params, stackSize) {
@@ -494,13 +521,14 @@ export class Trace {
             }
         }
     }
-    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now()) {
+    run(args = [], variables = null, vars = null, functions = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY) {
         const frames = [];
         let split = [];
         let fn = '';
         let script = '';
         let tc = false;
         let value = null;
+        let steps = 0;
         let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize;
         let f = new StackFrame(this.tokens, stackSize);
         let stack = f.stack;
@@ -536,6 +564,14 @@ export class Trace {
                 if (performance.now() - executionStart > executionLimit) {
                     this.errorLogger('Trace timed out');
                     this.lastRunTime = performance.now() - executionStart;
+                    this.lastRunSteps = steps;
+                    return 0;
+                }
+                steps++;
+                if (steps > maxSteps) {
+                    this.errorLogger('Trace exceeded step limit');
+                    this.lastRunTime = performance.now() - executionStart;
+                    this.lastRunSteps = steps;
                     return 0;
                 }
                 switch (t.kind) {
@@ -617,6 +653,7 @@ export class Trace {
                             break;
                         }
                         fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('));
+                        const callParams = parseParamList(t.string);
                         if (t.kind === 14 /* TokenKind.function */ || t.kind === 13 /* TokenKind.aFunction */) {
                             script = t.string.substring(t.string.indexOf('{') + 1, t.string.length - 1);
                         }
@@ -625,7 +662,9 @@ export class Trace {
                         }
                         if (fn !== '') {
                             // named function
-                            functions.set(fn, Trace.parse(script));
+                            const ms = Trace.parse(script);
+                            ms.callParams = callParams;
+                            functions.set(fn, ms);
                             break;
                         }
                         // anonymous function
@@ -653,6 +692,18 @@ export class Trace {
                         fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('));
                         if (functions.has(fn)) {
                             const ms = functions.get(fn);
+                            const callArgs = parseCallArgs(t.string);
+                            for (let i = 0; i < ms.callParams.length; i++) {
+                                const param = ms.callParams[i];
+                                if (!paramNamePattern.test(param)) {
+                                    throw new Error(`Syntax error: invalid function parameter "${param}"`);
+                                }
+                                const arg = callArgs[i];
+                                const argValue = arg === undefined
+                                    ? 0
+                                    : Trace.parse(arg).run([], null, vars, functions, rand, executionLimit, executionStart, maxSteps);
+                                vars.set(param, +(argValue ?? 0));
+                            }
                             if (!tc) {
                                 frames.push(f);
                             }
@@ -836,10 +887,22 @@ export class Trace {
             value = f.value;
         }
         this.lastRunTime = performance.now() - executionStart;
+        this.lastRunSteps = steps;
         return value;
+    }
+    runWithOptions(options = {}) {
+        const value = this.run(options.args ?? [], options.variables ?? null, null, null, options.rand ?? Math.random, options.timeoutMs ?? 1000, performance.now(), options.maxSteps ?? Number.POSITIVE_INFINITY);
+        return {
+            value,
+            steps: this.lastRunSteps,
+            runtimeMs: this.lastRunTime
+        };
     }
 }
 export const runTrace = (script, ...args) => {
     return Trace.parse(script).run(args);
+};
+export const runTraceWithOptions = (script, options = {}) => {
+    return Trace.parse(script).runWithOptions(options);
 };
 //# sourceMappingURL=trace.js.map
