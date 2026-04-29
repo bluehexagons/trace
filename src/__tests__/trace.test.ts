@@ -203,6 +203,14 @@ describe('script parameters', () => {
   it('accesses pointer-based parameters', () => {
     expect(runTrace('[...] &1 + &2', 3, 7)).toBe(10)
   })
+
+  it('named params — all params accessible including last', () => {
+    expect(runTrace('[a,b,c] a + b + c', 1, 2, 3)).toBe(6)
+  })
+
+  it('named params — single param', () => {
+    expect(runTrace('[x] x * 2', 5)).toBe(10)
+  })
 })
 
 describe('conditionals', () => {

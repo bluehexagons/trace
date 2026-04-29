@@ -382,7 +382,6 @@ const intoOperands = new Set([
     7 /* TokenKind.not */,
     9 /* TokenKind.startGroup */,
 ]);
-const stdlib = new Map();
 export class Trace {
     body;
     tokens;
@@ -421,8 +420,8 @@ export class Trace {
         // script parameters
         match = /^\[((,?[a-zA-Z_][\w]*)*),?(\.\.\.)?\]/.exec(stringLeft);
         if (match !== null) {
-            params = match[1].split(',');
-            stackSize = match[3] === '...' ? -1 : params.length;
+            params = match[1] ? match[1].split(',') : [];
+            stackSize = match[3] === '...' ? -1 : params.length + 1;
             stringLeft = stringLeft.substring(match[0].length);
         }
         else {
@@ -461,7 +460,7 @@ export class Trace {
                     // close all remaining parenthesis
                     while (groupLevel > 0) {
                         groupLevel--;
-                        tokens.splice(tokens.length, 0, { kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
+                        tokens.push({ kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
                     }
                     return new Trace(preprocessed, tokens, params, stackSize);
                 }
@@ -490,7 +489,7 @@ export class Trace {
                 }
                 while (groupLevel > opLevel) {
                     groupLevel--;
-                    tokens.splice(tokens.length, 0, { kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
+                    tokens.push({ kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
                 }
                 loi[loi.length - 1] = tokens.length + 1;
             }
@@ -498,7 +497,7 @@ export class Trace {
                 loi.pop();
                 while (groupLevel > 0) {
                     groupLevel--;
-                    tokens.splice(tokens.length, 0, { kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
+                    tokens.push({ kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
                 }
                 groupLevel = groupLevels.pop();
             }
@@ -511,7 +510,7 @@ export class Trace {
                 // automatically close all remaining parenthesis on new statement
                 while (groupLevel > 0) {
                     groupLevel--;
-                    tokens.splice(tokens.length, 0, { kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
+                    tokens.push({ kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
                 }
                 loi[0] = tokens.length + 1;
             }
@@ -538,7 +537,7 @@ export class Trace {
                 // close all remaining parenthesis
                 while (groupLevel > 0) {
                     groupLevel--;
-                    tokens.splice(tokens.length, 0, { kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
+                    tokens.push({ kind: 10 /* TokenKind.endGroup */, value: NaN, string: ')' });
                 }
                 return new Trace(preprocessed, tokens, params, stackSize);
             }
@@ -569,7 +568,7 @@ export class Trace {
         }
         if (functions === null) {
             if (this.functions === null) {
-                this.functions = new Map(stdlib);
+                this.functions = new Map();
             }
             functions = this.functions;
         }
@@ -604,12 +603,13 @@ export class Trace {
                     case 48 /* TokenKind.beep */:
                         // beeps are the logging feature
                         if (t.string.startsWith('&') && t.string.length > 1) {
+                            const s = f.stack;
                             if (/[0-9]/.test(t.string[1])) {
-                                this.logger('token ' + f.i + ':', '&' + t.string.substring(1), f.stack[parseInt(t.string.substring(1), 10)]);
+                                this.logger('token ' + f.i + ':', '&' + t.string.substring(1), s !== null ? s[parseInt(t.string.substring(1), 10)] : undefined);
                             }
                             else {
-                                const v = vars.get(t.string.substring(1));
-                                this.logger('token ' + f.i + ':', '&' + v, f.stack[v]);
+                                const v = vars.get(t.string.substring(1)) ?? 0;
+                                this.logger('token ' + f.i + ':', '&' + v, s !== null ? s[v] : undefined);
                             }
                         }
                         else if (t.string.startsWith('=')) {
@@ -934,7 +934,7 @@ export class Trace {
     }
     runWithOptions(options = {}) {
         const vars = options.persist ? null : new Map();
-        const functions = options.persist ? null : new Map(stdlib);
+        const functions = options.persist ? null : new Map();
         const startedAt = performance.now();
         const context = {
             startedAt,

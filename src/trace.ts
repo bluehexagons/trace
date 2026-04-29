@@ -448,8 +448,6 @@ const intoOperands = new Set([
   TokenKind.startGroup,
 ])
 
-const stdlib = new Map<string, Trace>()
-
 export class Trace {
   static logger = console.log
   static errorLogger = console.error
@@ -485,8 +483,8 @@ export class Trace {
     // script parameters
     match = /^\[((,?[a-zA-Z_][\w]*)*),?(\.\.\.)?\]/.exec(stringLeft)
     if (match !== null) {
-      params = match[1].split(',')
-      stackSize = match[3] === '...' ? -1 : params.length
+      params = match[1] ? match[1].split(',') : []
+      stackSize = match[3] === '...' ? -1 : params.length + 1
       stringLeft = stringLeft.substring(match[0].length)
     } else {
       match = /^\[([0-9]+)\]/.exec(stringLeft)
@@ -529,7 +527,7 @@ export class Trace {
           // close all remaining parenthesis
           while (groupLevel > 0) {
             groupLevel--
-            tokens.splice(tokens.length, 0, { kind: TokenKind.endGroup, value: NaN, string: ')' })
+            tokens.push({ kind: TokenKind.endGroup, value: NaN, string: ')' })
           }
 
           return new Trace(preprocessed, tokens, params, stackSize)
@@ -561,7 +559,7 @@ export class Trace {
         }
         while (groupLevel > opLevel) {
           groupLevel--
-          tokens.splice(tokens.length, 0, { kind: TokenKind.endGroup, value: NaN, string: ')' })
+          tokens.push({ kind: TokenKind.endGroup, value: NaN, string: ')' })
         }
 
         loi[loi.length - 1] = tokens.length + 1
@@ -571,7 +569,7 @@ export class Trace {
         loi.pop()
         while (groupLevel > 0) {
           groupLevel--
-          tokens.splice(tokens.length, 0, { kind: TokenKind.endGroup, value: NaN, string: ')' })
+          tokens.push({ kind: TokenKind.endGroup, value: NaN, string: ')' })
         }
 
         groupLevel = groupLevels.pop() as number
@@ -583,7 +581,7 @@ export class Trace {
         // automatically close all remaining parenthesis on new statement
         while (groupLevel > 0) {
           groupLevel--
-          tokens.splice(tokens.length, 0, { kind: TokenKind.endGroup, value: NaN, string: ')' })
+          tokens.push({ kind: TokenKind.endGroup, value: NaN, string: ')' })
         }
 
         loi[0] = tokens.length + 1
@@ -612,7 +610,7 @@ export class Trace {
         // close all remaining parenthesis
         while (groupLevel > 0) {
           groupLevel--
-          tokens.splice(tokens.length, 0, { kind: TokenKind.endGroup, value: NaN, string: ')' })
+          tokens.push({ kind: TokenKind.endGroup, value: NaN, string: ')' })
         }
         return new Trace(preprocessed, tokens, params, stackSize)
       }
@@ -660,7 +658,7 @@ export class Trace {
 
     if (functions === null) {
       if (this.functions === null) {
-        this.functions = new Map(stdlib)
+        this.functions = new Map<string, Trace>()
       }
       functions = this.functions
     }
@@ -702,11 +700,12 @@ export class Trace {
         case TokenKind.beep:
           // beeps are the logging feature
           if (t.string.startsWith('&') && t.string.length > 1) {
+            const s = f.stack
             if (/[0-9]/.test(t.string[1])) {
-              this.logger('token ' + f.i + ':', '&' + t.string.substring(1), (f.stack as Float64Array)[parseInt(t.string.substring(1), 10)])
+              this.logger('token ' + f.i + ':', '&' + t.string.substring(1), s !== null ? s[parseInt(t.string.substring(1), 10)] : undefined)
             } else {
-              const v = vars.get(t.string.substring(1)) as number
-              this.logger('token ' + f.i + ':', '&' + v, (f.stack as Float64Array)[v])
+              const v = vars.get(t.string.substring(1)) ?? 0
+              this.logger('token ' + f.i + ':', '&' + v, s !== null ? s[v] : undefined)
             }
           } else if (t.string.startsWith('=')) {
             this.logger('token ' + f.i + ':', t.string.substring(1), vars.get(t.string.substring(1)))
@@ -1071,7 +1070,7 @@ export class Trace {
 
   runWithOptions(options: TraceRunOptions = {}): TraceRunResult {
     const vars = options.persist ? null : new Map<string, number>()
-    const functions = options.persist ? null : new Map(stdlib)
+    const functions = options.persist ? null : new Map<string, Trace>()
     const startedAt = performance.now()
     const context: TraceRunContext = {
       startedAt,
