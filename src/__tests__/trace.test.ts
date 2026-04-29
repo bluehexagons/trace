@@ -209,6 +209,42 @@ describe('execution limits', () => {
   it('keeps permissive unknown variable behavior by default', () => {
     expect(runTraceWithOptions('score + 1').value).toBe(1)
   })
+
+  it('flags increment of undeclared variable in strict mode', () => {
+    const result = runTraceWithOptions('x++', { strict: true })
+    expect(result.status).toBe('error')
+    expect(result.error).toMatch(/increment.*"x"/)
+  })
+
+  it('allows increment of declared variable in strict mode', () => {
+    const result = runTraceWithOptions('x = 0; x++; x', { strict: true })
+    expect(result.status).toBe('completed')
+    expect(result.value).toBe(1)
+  })
+
+  it('flags decrement of undeclared variable in strict mode', () => {
+    const result = runTraceWithOptions('x--', { strict: true })
+    expect(result.status).toBe('error')
+    expect(result.error).toMatch(/decrement.*"x"/)
+  })
+
+  it('flags compound assignment to undeclared variable in strict mode', () => {
+    const result = runTraceWithOptions('x += 5', { strict: true })
+    expect(result.status).toBe('error')
+    expect(result.error).toMatch(/compound assignment.*"x"/)
+  })
+
+  it('allows compound assignment to declared variable in strict mode', () => {
+    const result = runTraceWithOptions('x = 0; x += 5; x', { strict: true })
+    expect(result.status).toBe('completed')
+    expect(result.value).toBe(5)
+  })
+
+  it('allows plain assignment to undeclared variable in strict mode', () => {
+    const result = runTraceWithOptions('x = 5; x', { strict: true })
+    expect(result.status).toBe('completed')
+    expect(result.value).toBe(5)
+  })
 })
 
 describe('script parameters', () => {

@@ -322,7 +322,20 @@ type TraceRunContext = {
 }
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/
-const isAssignmentStart = (kind: TokenKind | undefined) => kind === TokenKind.set
+
+// Returns true when the variable token is the target of a write operation rather
+// than a read, so the strict unknown-variable check can be deferred to the write
+// site which provides a more specific error message.
+const isWriteTarget = (kind: TokenKind | undefined) =>
+  kind === TokenKind.set ||
+  kind === TokenKind.addSet ||
+  kind === TokenKind.subSet ||
+  kind === TokenKind.mulSet ||
+  kind === TokenKind.divSet ||
+  kind === TokenKind.modSet ||
+  kind === TokenKind.powSet ||
+  kind === TokenKind.increment ||
+  kind === TokenKind.decrement
 
 const createSeededRandom = (seed: number) => {
   let state = seed >>> 0
@@ -395,9 +408,13 @@ class StackFrame {
     this.stack = stackLength <= 0 ? null : new Float64Array(stackLength)
   }
 }
-const closeStatement = (f: StackFrame, vars: Map<string, number>) => {
+const closeStatement = (f: StackFrame, vars: Map<string, number>, strict = false) => {
   if (f.setVar === '') {
     return
+  }
+
+  if (strict && f.setOp !== TokenKind.set && !vars.has(f.setVar)) {
+    throw new Error(`Runtime error: compound assignment to undeclared variable "${f.setVar}"`)
   }
 
   const varVal = vars.get(f.setVar) ?? 0
@@ -770,7 +787,7 @@ export class Trace {
           break
 
         case TokenKind.variable:
-          if (strict && !vars.has(t.string) && !isAssignmentStart(f.tokens[f.i + 1]?.kind)) {
+          if (strict && !vars.has(t.string) && !isWriteTarget(f.tokens[f.i + 1]?.kind)) {
             throw new Error(`Runtime error: unknown variable "${t.string}"`)
           }
           val = vars.get(t.string) ?? 0
@@ -904,12 +921,18 @@ export class Trace {
           continue
 
         case TokenKind.increment:
+          if (strict && !vars.has(f.lastVar)) {
+            throw new Error(`Runtime error: increment of undeclared variable "${f.lastVar}"`)
+          }
           val = (vars.get(f.lastVar) ?? 0) + 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
           break
 
         case TokenKind.decrement:
+          if (strict && !vars.has(f.lastVar)) {
+            throw new Error(`Runtime error: decrement of undeclared variable "${f.lastVar}"`)
+          }
           val = (vars.get(f.lastVar) ?? 0) - 1
           vars.set(f.lastVar, val)
           f.value = f.lastValue
@@ -917,7 +940,7 @@ export class Trace {
 
         case TokenKind.statement:
         case TokenKind.separator:
-          closeStatement(f, vars)
+          closeStatement(f, vars, strict)
           f.lastValue = 0
           f.value = 0
           break
@@ -1077,7 +1100,7 @@ export class Trace {
         }
       }
 
-      closeStatement(f, vars)
+      closeStatement(f, vars, strict)
       value = f.value
     }
 

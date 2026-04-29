@@ -172,8 +172,6 @@ can also read args/params using pointers: `&1`, `&2`, `&variable`, etc
 
 `&0` is always the number of arguments, arguments start at `&1`
 
-would like to add function parameters later
-
 # functions
 
 `name() => { line1; line2; implicit return statement }`
@@ -250,9 +248,34 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
 });
 ```
 
-`maxSteps` limits interpreter token execution, including function argument evaluation. `timeoutMs` limits wall-clock runtime. `strict` reports unknown variables and function calls as errors instead of resolving them to `0`. `randomSeed` makes range, plusminus, and selection operations deterministic unless an explicit `rand` function is provided. The result includes `{ value, steps, runtimeMs, status, error }`, where `status` is `completed`, `timeout`, `step-limit`, or `error`.
+`maxSteps` limits interpreter token execution, including function argument evaluation. `timeoutMs` limits wall-clock runtime. `strict` enables stricter runtime checks (see below). `randomSeed` makes range, plusminus, and selection operations deterministic unless an explicit `rand` function is provided. The result includes `{ value, steps, runtimeMs, status, error }`, where `status` is `completed`, `timeout`, `step-limit`, or `error`.
 
 `runTraceWithOptions` and `Trace.runWithOptions` use isolated variables and functions by default. Pass `{ persist: true }` to reuse the `Trace` instance's globals across runs.
+
+## strict mode
+
+`strict: true` turns several silent behaviors into runtime errors:
+
+| Situation | Default | Strict |
+|---|---|---|
+| Read undeclared variable | resolves to `0` | `error` |
+| Call undeclared function | returns `0` | `error` |
+| `x++` / `x--` on undeclared variable | initializes at `0` | `error` |
+| `x += n` (any compound op) on undeclared variable | initializes at `0` | `error` |
+
+Plain assignment (`x = 5`) is always allowed in strict mode — it declares the variable. All errors are surfaced in `result.error` and set `result.status` to `"error"`.
+
+# parse errors
+
+Parse errors include the character offset in the preprocessed source and a snippet with a `^` pointer:
+
+```
+Syntax error at offset 2: unexpected operand
+  1><2
+    ^
+```
+
+The preprocessed source has whitespace and comments stripped, so the offset may not match the original text directly.
 
 # echo
 
