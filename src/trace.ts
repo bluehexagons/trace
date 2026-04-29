@@ -509,7 +509,13 @@ export class Trace {
         }
       }
       if (match === null) {
-        throw new Error(`Syntax error: unexpected ${findOperator ? 'operator' : 'operand'} "${stringLeft}"`)
+        const offset = preprocessed.length - stringLeft.length
+        const contextStart = Math.max(0, offset - 20)
+        const snippet = preprocessed.substring(contextStart, offset + 30)
+        const col = offset - contextStart
+        throw new Error(
+          `Syntax error at offset ${offset}: unexpected ${findOperator ? 'operator' : 'operand'}\n  ${snippet}\n  ${' '.repeat(col)}^`
+        )
       }
 
       // remove consumed text from string

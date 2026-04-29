@@ -1,6 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { runTrace, runTraceWithOptions, Trace } from '../index.js'
 
+describe('parse errors', () => {
+  it('throws on invalid syntax', () => {
+    expect(() => Trace.parse('1 > < 2')).toThrow('Syntax error')
+  })
+
+  it('includes character offset in parse error', () => {
+    expect(() => Trace.parse('1 > < 2')).toThrowError(/Syntax error at offset \d+/)
+  })
+
+  it('includes source pointer in parse error', () => {
+    expect(() => Trace.parse('1 > < 2')).toThrowError(/\^/)
+  })
+
+  it('offset points at the unparseable position', () => {
+    let err: Error | undefined
+    try { Trace.parse('1 > < 2') } catch (e) { err = e as Error }
+    // preprocessed is '1><2'; error is at offset 2 (the '<')
+    expect(err?.message).toContain('offset 2')
+  })
+})
+
 describe('runTrace', () => {
   it('evaluates simple addition', () => {
     expect(runTrace('1 + 10')).toBe(11)
