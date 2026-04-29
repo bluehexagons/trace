@@ -334,19 +334,14 @@ type TraceRunContext = {
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/
 
-// Returns true when the variable token is the target of a write operation rather
-// than a read, so the strict unknown-variable check can be deferred to the write
-// site which provides a more specific error message.
-const isWriteTarget = (kind: TokenKind | undefined) =>
-  kind === TokenKind.set ||
-  kind === TokenKind.addSet ||
-  kind === TokenKind.subSet ||
-  kind === TokenKind.mulSet ||
-  kind === TokenKind.divSet ||
-  kind === TokenKind.modSet ||
-  kind === TokenKind.powSet ||
-  kind === TokenKind.increment ||
-  kind === TokenKind.decrement
+// Tokens that make the preceding variable a write target rather than a read,
+// so the strict unknown-variable check can be deferred to the write site which
+// provides a more specific error message.
+const writeTargets = new Set([
+  TokenKind.set, TokenKind.addSet, TokenKind.subSet, TokenKind.mulSet,
+  TokenKind.divSet, TokenKind.modSet, TokenKind.powSet,
+  TokenKind.increment, TokenKind.decrement,
+])
 
 const createSeededRandom = (seed: number) => {
   let state = seed >>> 0
@@ -425,6 +420,19 @@ class StackFrame {
     this.stack = stackLength <= 0 ? null : new Float64Array(stackLength)
   }
 }
+const applySetOp = (op: TokenKind, cur: number, val: number): number => {
+  switch (op) {
+  case TokenKind.set:    return val
+  case TokenKind.addSet: return cur + val
+  case TokenKind.subSet: return cur - val
+  case TokenKind.mulSet: return cur * val
+  case TokenKind.divSet: return val === 0 ? 0 : cur / val
+  case TokenKind.modSet: return (val === 0 || !Number.isFinite(val)) ? 0 : cur % val
+  case TokenKind.powSet: return cur ** val
+  default:               return cur
+  }
+}
+
 const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<string, Float64Array>, strict = false) => {
   if (f.newArray !== null) {
     if (f.setVar !== '') {
@@ -448,16 +456,7 @@ const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<st
     const arr = arrays.get(f.writeArray)
     const idx = f.writeIndex
     if (arr !== undefined && idx >= 1 && idx < arr.length) {
-      const cur = arr[idx]
-      switch (f.setOp) {
-      case TokenKind.set:    arr[idx] = f.value; break
-      case TokenKind.addSet: arr[idx] = cur + f.value; break
-      case TokenKind.subSet: arr[idx] = cur - f.value; break
-      case TokenKind.mulSet: arr[idx] = cur * f.value; break
-      case TokenKind.divSet: arr[idx] = f.value === 0 ? 0 : cur / f.value; break
-      case TokenKind.modSet: arr[idx] = (f.value === 0 || !Number.isFinite(f.value)) ? 0 : cur % f.value; break
-      case TokenKind.powSet: arr[idx] = cur ** f.value; break
-      }
+      arr[idx] = applySetOp(f.setOp, arr[idx], f.value)
       f.value = arr[idx]
     } else if (strict) {
       if (arr === undefined) {
@@ -475,39 +474,9 @@ const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<st
     throw new Error(`Runtime error: compound assignment to undeclared variable "${f.setVar}"`)
   }
 
-  const varVal = vars.get(f.setVar) ?? 0
-
-  switch (f.setOp) {
-  case TokenKind.set:
-    vars.set(f.setVar, f.value)
-    break
-
-  case TokenKind.addSet:
-    vars.set(f.setVar, varVal + f.value)
-    break
-
-  case TokenKind.subSet:
-    vars.set(f.setVar, varVal - f.value)
-    break
-
-  case TokenKind.mulSet:
-    vars.set(f.setVar, varVal * f.value)
-    break
-
-  case TokenKind.divSet:
-    vars.set(f.setVar, varVal / f.value)
-    break
-
-  case TokenKind.modSet:
-    vars.set(f.setVar, varVal % f.value)
-    break
-
-  case TokenKind.powSet:
-    vars.set(f.setVar, varVal ** f.value)
-    break
-  }
-
-  f.value = vars.get(f.setVar) as number
+  const newVal = applySetOp(f.setOp, vars.get(f.setVar) ?? 0, f.value)
+  vars.set(f.setVar, newVal)
+  f.value = newVal
   f.setVar = ''
   f.arrayWrite = false
 }
@@ -700,6 +669,7 @@ export class Trace {
         if (indexSrc.length > 0) {
           token.parsedArgs = [Trace.parse(indexSrc)]
         }
+        token.string = match[0].substring(0, bracketPos)
       } else if (kind === TokenKind.arrayCreate) {
         const sizeSrc = match[0].substring(1, match[0].length - 1)
         if (sizeSrc.length > 0) {
@@ -866,7 +836,7 @@ export class Trace {
           break
 
         case TokenKind.variable:
-          if (strict && !vars.has(t.string) && !arrays.has(t.string) && !isWriteTarget(f.tokens[f.i + 1]?.kind)) {
+          if (strict && !vars.has(t.string) && !arrays.has(t.string) && !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
             throw new Error(`Runtime error: unknown variable "${t.string}"`)
           }
           val = vars.get(t.string) ?? arrays.get(t.string)?.[0] ?? 0
@@ -1023,7 +993,7 @@ export class Trace {
           break
 
         case TokenKind.arrayRead: {
-          const arrName = t.string.substring(0, t.string.indexOf('['))
+          const arrName = t.string
           const indexTrace = t.parsedArgs?.[0]
           const idxRaw = indexTrace === undefined ? 0 : (
             indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0

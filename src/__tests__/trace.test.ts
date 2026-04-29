@@ -96,6 +96,14 @@ describe('variables', () => {
   it('supports decrement --', () => {
     expect(runTrace('x = 5; x--; x')).toBe(4)
   })
+
+  it('/= by zero returns 0 (matches runtime / operator)', () => {
+    expect(runTrace('x = 10; x /= 0; x')).toBe(0)
+  })
+
+  it('%= by zero returns 0 (matches runtime % operator)', () => {
+    expect(runTrace('x = 10; x %%= 0; x')).toBe(0)
+  })
 })
 
 describe('functions', () => {

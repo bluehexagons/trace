@@ -284,18 +284,14 @@ for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.g
     opLevels.set(t, 1);
 }
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
-// Returns true when the variable token is the target of a write operation rather
-// than a read, so the strict unknown-variable check can be deferred to the write
-// site which provides a more specific error message.
-const isWriteTarget = (kind) => kind === 37 /* TokenKind.set */ ||
-    kind === 38 /* TokenKind.addSet */ ||
-    kind === 39 /* TokenKind.subSet */ ||
-    kind === 40 /* TokenKind.mulSet */ ||
-    kind === 41 /* TokenKind.divSet */ ||
-    kind === 42 /* TokenKind.modSet */ ||
-    kind === 43 /* TokenKind.powSet */ ||
-    kind === 44 /* TokenKind.increment */ ||
-    kind === 45 /* TokenKind.decrement */;
+// Tokens that make the preceding variable a write target rather than a read,
+// so the strict unknown-variable check can be deferred to the write site which
+// provides a more specific error message.
+const writeTargets = new Set([
+    37 /* TokenKind.set */, 38 /* TokenKind.addSet */, 39 /* TokenKind.subSet */, 40 /* TokenKind.mulSet */,
+    41 /* TokenKind.divSet */, 42 /* TokenKind.modSet */, 43 /* TokenKind.powSet */,
+    44 /* TokenKind.increment */, 45 /* TokenKind.decrement */,
+]);
 const createSeededRandom = (seed) => {
     let state = seed >>> 0;
     return () => {
@@ -367,6 +363,18 @@ class StackFrame {
         this.stack = stackLength <= 0 ? null : new Float64Array(stackLength);
     }
 }
+const applySetOp = (op, cur, val) => {
+    switch (op) {
+        case 37 /* TokenKind.set */: return val;
+        case 38 /* TokenKind.addSet */: return cur + val;
+        case 39 /* TokenKind.subSet */: return cur - val;
+        case 40 /* TokenKind.mulSet */: return cur * val;
+        case 41 /* TokenKind.divSet */: return val === 0 ? 0 : cur / val;
+        case 42 /* TokenKind.modSet */: return (val === 0 || !Number.isFinite(val)) ? 0 : cur % val;
+        case 43 /* TokenKind.powSet */: return cur ** val;
+        default: return cur;
+    }
+};
 const closeStatement = (f, vars, arrays, strict = false) => {
     if (f.newArray !== null) {
         if (f.setVar !== '') {
@@ -388,30 +396,7 @@ const closeStatement = (f, vars, arrays, strict = false) => {
         const arr = arrays.get(f.writeArray);
         const idx = f.writeIndex;
         if (arr !== undefined && idx >= 1 && idx < arr.length) {
-            const cur = arr[idx];
-            switch (f.setOp) {
-                case 37 /* TokenKind.set */:
-                    arr[idx] = f.value;
-                    break;
-                case 38 /* TokenKind.addSet */:
-                    arr[idx] = cur + f.value;
-                    break;
-                case 39 /* TokenKind.subSet */:
-                    arr[idx] = cur - f.value;
-                    break;
-                case 40 /* TokenKind.mulSet */:
-                    arr[idx] = cur * f.value;
-                    break;
-                case 41 /* TokenKind.divSet */:
-                    arr[idx] = f.value === 0 ? 0 : cur / f.value;
-                    break;
-                case 42 /* TokenKind.modSet */:
-                    arr[idx] = (f.value === 0 || !Number.isFinite(f.value)) ? 0 : cur % f.value;
-                    break;
-                case 43 /* TokenKind.powSet */:
-                    arr[idx] = cur ** f.value;
-                    break;
-            }
+            arr[idx] = applySetOp(f.setOp, arr[idx], f.value);
             f.value = arr[idx];
         }
         else if (strict) {
@@ -428,31 +413,9 @@ const closeStatement = (f, vars, arrays, strict = false) => {
     if (strict && f.setOp !== 37 /* TokenKind.set */ && !vars.has(f.setVar)) {
         throw new Error(`Runtime error: compound assignment to undeclared variable "${f.setVar}"`);
     }
-    const varVal = vars.get(f.setVar) ?? 0;
-    switch (f.setOp) {
-        case 37 /* TokenKind.set */:
-            vars.set(f.setVar, f.value);
-            break;
-        case 38 /* TokenKind.addSet */:
-            vars.set(f.setVar, varVal + f.value);
-            break;
-        case 39 /* TokenKind.subSet */:
-            vars.set(f.setVar, varVal - f.value);
-            break;
-        case 40 /* TokenKind.mulSet */:
-            vars.set(f.setVar, varVal * f.value);
-            break;
-        case 41 /* TokenKind.divSet */:
-            vars.set(f.setVar, varVal / f.value);
-            break;
-        case 42 /* TokenKind.modSet */:
-            vars.set(f.setVar, varVal % f.value);
-            break;
-        case 43 /* TokenKind.powSet */:
-            vars.set(f.setVar, varVal ** f.value);
-            break;
-    }
-    f.value = vars.get(f.setVar);
+    const newVal = applySetOp(f.setOp, vars.get(f.setVar) ?? 0, f.value);
+    vars.set(f.setVar, newVal);
+    f.value = newVal;
     f.setVar = '';
     f.arrayWrite = false;
 };
@@ -637,6 +600,7 @@ export class Trace {
                 if (indexSrc.length > 0) {
                     token.parsedArgs = [Trace.parse(indexSrc)];
                 }
+                token.string = match[0].substring(0, bracketPos);
             }
             else if (kind === 46 /* TokenKind.arrayCreate */) {
                 const sizeSrc = match[0].substring(1, match[0].length - 1);
@@ -774,7 +738,7 @@ export class Trace {
                         }
                         break;
                     case 1 /* TokenKind.variable */:
-                        if (strict && !vars.has(t.string) && !arrays.has(t.string) && !isWriteTarget(f.tokens[f.i + 1]?.kind)) {
+                        if (strict && !vars.has(t.string) && !arrays.has(t.string) && !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
                             throw new Error(`Runtime error: unknown variable "${t.string}"`);
                         }
                         val = vars.get(t.string) ?? arrays.get(t.string)?.[0] ?? 0;
@@ -920,7 +884,7 @@ export class Trace {
                         f.value = f.lastValue;
                         break;
                     case 47 /* TokenKind.arrayRead */: {
-                        const arrName = t.string.substring(0, t.string.indexOf('['));
+                        const arrName = t.string;
                         const indexTrace = t.parsedArgs?.[0];
                         const idxRaw = indexTrace === undefined ? 0 : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0);
                         if (context.status !== 'completed') {
