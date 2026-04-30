@@ -1,5 +1,151 @@
 // performance is available globally in Node.js (>=16) and browsers
 // TODO: consider |> function calls
+// Returns the index of the matching close delimiter for s[startIdx], allowing
+// nested () and {} interleaved. Returns -1 if unbalanced.
+const findMatchingClose = (s, startIdx, open, close) => {
+    let parens = 0;
+    let braces = 0;
+    for (let i = startIdx; i < s.length; i++) {
+        const c = s[i];
+        if (c === '(')
+            parens++;
+        else if (c === ')') {
+            parens--;
+            if (parens < 0)
+                return -1;
+            if (close === ')' && parens === 0 && braces === 0)
+                return i;
+        }
+        else if (c === '{')
+            braces++;
+        else if (c === '}') {
+            braces--;
+            if (braces < 0)
+                return -1;
+            if (close === '}' && braces === 0 && parens === 0)
+                return i;
+        }
+    }
+    return -1;
+};
+const scanAFunction = (s) => {
+    if (s[0] !== '(')
+        return null;
+    const cp = findMatchingClose(s, 0, '(', ')');
+    if (cp === -1)
+        return null;
+    if (s[cp + 1] !== '=' || s[cp + 2] !== '>' || s[cp + 3] !== '{')
+        return null;
+    const cb = findMatchingClose(s, cp + 3, '{', '}');
+    if (cb === -1)
+        return null;
+    return s.substring(0, cb + 1);
+};
+const scanALambda = (s) => {
+    if (s[0] !== '(')
+        return null;
+    const cp = findMatchingClose(s, 0, '(', ')');
+    if (cp === -1)
+        return null;
+    if (s[cp + 1] !== '=' || s[cp + 2] !== '>')
+        return null;
+    let i = cp + 3;
+    while (i < s.length && s[i] !== ';')
+        i++;
+    return s.substring(0, Math.min(i + 1, s.length));
+};
+const scanFunction = (s) => {
+    const nm = /^[a-zA-Z_][\w.]*/.exec(s);
+    if (nm === null)
+        return null;
+    const after = nm[0].length;
+    if (s[after] !== '(')
+        return null;
+    const cp = findMatchingClose(s, after, '(', ')');
+    if (cp === -1)
+        return null;
+    if (s[cp + 1] !== '=' || s[cp + 2] !== '>' || s[cp + 3] !== '{')
+        return null;
+    const cb = findMatchingClose(s, cp + 3, '{', '}');
+    if (cb === -1)
+        return null;
+    return s.substring(0, cb + 1);
+};
+const scanLambda = (s) => {
+    const nm = /^[a-zA-Z_][\w.]*/.exec(s);
+    if (nm === null)
+        return null;
+    const after = nm[0].length;
+    if (s[after] !== '(')
+        return null;
+    const cp = findMatchingClose(s, after, '(', ')');
+    if (cp === -1)
+        return null;
+    if (s[cp + 1] !== '=' || s[cp + 2] !== '>')
+        return null;
+    let i = cp + 3;
+    while (i < s.length && s[i] !== ';')
+        i++;
+    return s.substring(0, Math.min(i + 1, s.length));
+};
+const scanFunctionCall = (s) => {
+    const nm = /^[a-zA-Z_][\w.]*/.exec(s);
+    if (nm === null) {
+        if (s.startsWith('()'))
+            return '()';
+        return null;
+    }
+    const after = nm[0].length;
+    if (s[after] !== '(')
+        return null;
+    const cp = findMatchingClose(s, after, '(', ')');
+    if (cp === -1)
+        return null;
+    return s.substring(0, cp + 1);
+};
+const scanTailCall = (s) => {
+    if (s[0] !== '>')
+        return null;
+    const inner = scanFunctionCall(s.substring(1));
+    if (inner === null)
+        return null;
+    return '>' + inner;
+};
+const scanCodeBlock = (s) => {
+    if (s[0] !== '{')
+        return null;
+    const cb = findMatchingClose(s, 0, '{', '}');
+    if (cb === -1)
+        return null;
+    return s.substring(0, cb + 1);
+};
+const scanBracketed = (s) => {
+    if (s[0] !== '[')
+        return null;
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+        if (s[i] === '[')
+            depth++;
+        else if (s[i] === ']') {
+            depth--;
+            if (depth === 0)
+                return s.substring(0, i + 1);
+        }
+    }
+    return null;
+};
+const scanArrayRead = (s) => {
+    const nm = /^[a-zA-Z_][\w.]*/.exec(s);
+    if (nm === null)
+        return null;
+    const after = nm[0].length;
+    if (s[after] !== '[')
+        return null;
+    const sub = scanBracketed(s.substring(after));
+    if (sub === null)
+        return null;
+    return s.substring(0, after + sub.length);
+};
 var TokenKind;
 (function (TokenKind) {
     TokenKind[TokenKind["null"] = 0] = "null";
@@ -73,31 +219,31 @@ const operands = [
         kind: 7 /* TokenKind.not */
     },
     {
-        regex: /^\([^)]*\)=>\{[^}]*\}/,
+        scan: scanAFunction,
         kind: 13 /* TokenKind.aFunction */
     },
     {
-        regex: /^\([^)]*\)=>[^;]*;?/,
+        scan: scanALambda,
         kind: 15 /* TokenKind.aLambda */
     },
     {
-        regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>\{[^}]*\}/,
+        scan: scanFunction,
         kind: 14 /* TokenKind.function */
     },
     {
-        regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>[^;]*;?/,
+        scan: scanLambda,
         kind: 16 /* TokenKind.lambda */
     },
     {
-        regex: /^(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
+        scan: scanFunctionCall,
         kind: 11 /* TokenKind.functionCall */
     },
     {
-        regex: /^>(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
+        scan: scanTailCall,
         kind: 12 /* TokenKind.tailCall */
     },
     {
-        regex: /^[a-zA-Z_][\w.]*\[[^\]]*\]/,
+        scan: scanArrayRead,
         kind: 47 /* TokenKind.arrayRead */
     },
     {
@@ -125,7 +271,12 @@ const operands = [
         kind: 9 /* TokenKind.startGroup */
     },
     {
-        regex: /^\[[^\]]*\]/,
+        // Code block as operand: `{ body }` is sugar for `() => { body }`
+        scan: scanCodeBlock,
+        kind: 13 /* TokenKind.aFunction */
+    },
+    {
+        scan: scanBracketed,
         kind: 46 /* TokenKind.arrayCreate */
     },
     {
@@ -283,6 +434,19 @@ for (const t of [17 /* TokenKind.add */, 18 /* TokenKind.sub */]) {
 for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.gteq */, 27 /* TokenKind.lteq */, 28 /* TokenKind.eq */, 29 /* TokenKind.neq */]) {
     opLevels.set(t, 1);
 }
+const allStdlibCategories = ['loops', 'arrays'];
+const resolveStdlibCategories = (opt) => {
+    if (opt === false)
+        return new Set();
+    const out = new Set();
+    const o = (opt === undefined || opt === true) ? {} : opt;
+    for (const c of allStdlibCategories) {
+        if (o[c] !== false)
+            out.add(c);
+    }
+    return out;
+};
+const defaultStdlibCategories = new Set(allStdlibCategories);
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
 // Tokens that make the preceding variable a write target rather than a read,
 // so the strict unknown-variable check can be deferred to the write site which
@@ -319,17 +483,24 @@ const parseCallArgs = (source) => {
     }
     const args = [];
     const argSource = source.substring(start + 1, end);
-    let groupLevel = 0;
+    let parenLevel = 0;
+    let braceLevel = 0;
     let argStart = 0;
     for (let i = 0; i < argSource.length; i++) {
         const char = argSource[i];
         if (char === '(') {
-            groupLevel++;
+            parenLevel++;
         }
         else if (char === ')') {
-            groupLevel--;
+            parenLevel--;
         }
-        else if (char === ',' && groupLevel === 0) {
+        else if (char === '{') {
+            braceLevel++;
+        }
+        else if (char === '}') {
+            braceLevel--;
+        }
+        else if (char === ',' && parenLevel === 0 && braceLevel === 0) {
             args.push(argSource.substring(argStart, i).trim());
             argStart = i + 1;
         }
@@ -442,6 +613,263 @@ const intoOperands = new Set([
     7 /* TokenKind.not */,
     9 /* TokenKind.startGroup */,
 ]);
+const stdlibRegistry = new Map();
+const evalArg = (arg, ctx) => {
+    if (arg === undefined)
+        return 0;
+    return +(arg.run([], null, ctx.vars, ctx.functions, ctx.arrays, ctx.rand, ctx.executionLimit, ctx.startedAt, ctx.maxSteps, ctx.context, ctx.strict, ctx.stdlibCategories) ?? 0);
+};
+// Resolve a callable from a parsedArg (Trace) — accepts a bare function-name
+// reference, an anonymous function/lambda, or a code-block (which the parser
+// has already lowered to an anonymous function token).
+const resolveCallable = (arg, ctx) => {
+    if (arg === undefined)
+        return null;
+    const tk = arg.tokens;
+    if (tk.length !== 1)
+        return null;
+    const t = tk[0];
+    if (t.kind === 1 /* TokenKind.variable */) {
+        const fnRef = ctx.functions.get(t.string);
+        if (fnRef !== undefined)
+            return { trace: fnRef, params: fnRef.callParams };
+        return null;
+    }
+    if (t.kind === 13 /* TokenKind.aFunction */ || t.kind === 14 /* TokenKind.function */ ||
+        t.kind === 15 /* TokenKind.aLambda */ || t.kind === 16 /* TokenKind.lambda */) {
+        if (t.callable === undefined) {
+            const isFn = t.kind === 14 /* TokenKind.function */ || t.kind === 13 /* TokenKind.aFunction */;
+            const body = isFn
+                ? t.string.substring(t.string.indexOf('{') + 1, t.string.length - 1)
+                : t.string.substring(t.string.indexOf('>') + 1, t.string.endsWith(';') ? t.string.length - 1 : t.string.length);
+            const sub = Trace.parse(body);
+            sub.callParams = parseParamList(t.string);
+            t.callable = { trace: sub, params: sub.callParams };
+        }
+        return t.callable;
+    }
+    return null;
+};
+const callCallable = (callable, callerArgs, ctx) => {
+    // Set declared parameters as globals (mirrors the existing function-call
+    // convention) so named functions see their named params.
+    for (let i = 0; i < callable.params.length; i++) {
+        ctx.vars.set(callable.params[i], callerArgs[i] ?? 0);
+    }
+    return +(callable.trace.run(callerArgs, null, ctx.vars, ctx.functions, ctx.arrays, ctx.rand, ctx.executionLimit, ctx.startedAt, ctx.maxSteps, ctx.context, ctx.strict, ctx.stdlibCategories) ?? 0);
+};
+const resolveArrayName = (arg) => {
+    if (arg === undefined)
+        return null;
+    const tk = arg.tokens;
+    if (tk.length === 1 && tk[0].kind === 1 /* TokenKind.variable */)
+        return tk[0].string;
+    return null;
+};
+const requireArray = (name, op, ctx) => {
+    if (name === null) {
+        if (ctx.strict)
+            throw new Error(`Runtime error: ${op} requires a bare array variable as first argument`);
+        return null;
+    }
+    const arr = ctx.arrays.get(name);
+    if (arr === undefined) {
+        if (ctx.strict)
+            throw new Error(`Runtime error: ${op} on unknown array "${name}"`);
+        return null;
+    }
+    return arr;
+};
+// --- loops ---
+const evalCondOrCallable = (arg, callable, ctx) => {
+    if (callable !== null)
+        return callCallable(callable, [], ctx);
+    return evalArg(arg, ctx);
+};
+const stdlibWhile = (args, ctx) => {
+    if (args.length < 2)
+        return 0;
+    const cond = resolveCallable(args[0], ctx);
+    const body = resolveCallable(args[1], ctx);
+    let last = 0;
+    while (true) {
+        const c = evalCondOrCallable(args[0], cond, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+        if (c === 0)
+            break;
+        last = evalCondOrCallable(args[1], body, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+    }
+    return last;
+};
+const stdlibFor = (args, ctx) => {
+    if (args.length < 3)
+        return 0;
+    const init = resolveCallable(args[0], ctx);
+    const cond = resolveCallable(args[1], ctx);
+    const body = resolveCallable(args[2], ctx);
+    evalCondOrCallable(args[0], init, ctx);
+    if (ctx.context.status !== 'completed')
+        return 0;
+    let last = 0;
+    while (true) {
+        const c = evalCondOrCallable(args[1], cond, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+        if (c === 0)
+            break;
+        last = evalCondOrCallable(args[2], body, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+    }
+    return last;
+};
+const stdlibDoWhile = (args, ctx) => {
+    if (args.length < 2)
+        return 0;
+    const body = resolveCallable(args[0], ctx);
+    const cond = resolveCallable(args[1], ctx);
+    let last = 0;
+    while (true) {
+        last = evalCondOrCallable(args[0], body, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+        const c = evalCondOrCallable(args[1], cond, ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+        if (c === 0)
+            break;
+    }
+    return last;
+};
+stdlibRegistry.set('while', { category: 'loops', fn: stdlibWhile });
+stdlibRegistry.set('for', { category: 'loops', fn: stdlibFor });
+stdlibRegistry.set('dowhile', { category: 'loops', fn: stdlibDoWhile });
+// --- arrays ---
+const stdlibForeach = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'foreach', ctx);
+    if (arr === null)
+        return 0;
+    const cb = resolveCallable(args[1], ctx);
+    if (cb === null)
+        return 0;
+    let last = 0;
+    for (let i = 1; i < arr.length; i++) {
+        last = callCallable(cb, [arr[i], i], ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+    }
+    return last;
+};
+const stdlibMapMut = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'mapmut', ctx);
+    if (arr === null)
+        return 0;
+    const cb = resolveCallable(args[1], ctx);
+    if (cb === null)
+        return arr[0];
+    for (let i = 1; i < arr.length; i++) {
+        arr[i] = callCallable(cb, [arr[i], i], ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+    }
+    return arr[0];
+};
+const stdlibMap = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'map', ctx);
+    if (arr === null)
+        return 0;
+    const out = new Float64Array(arr.length);
+    out[0] = arr[0];
+    const cb = resolveCallable(args[1], ctx);
+    if (cb !== null) {
+        for (let i = 1; i < arr.length; i++) {
+            out[i] = callCallable(cb, [arr[i], i], ctx);
+            if (ctx.context.status !== 'completed')
+                return 0;
+        }
+    }
+    else {
+        for (let i = 1; i < arr.length; i++)
+            out[i] = arr[i];
+    }
+    // Hand the new array off via the caller's stack frame so that
+    // `result = map(arr, fn)` assigns it like a normal arrayCreate.
+    ctx.frame.newArray = out;
+    return out[0];
+};
+const stdlibReduce = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'reduce', ctx);
+    if (arr === null)
+        return 0;
+    const cb = resolveCallable(args[1], ctx);
+    if (cb === null)
+        return 0;
+    let acc = args.length >= 3 ? evalArg(args[2], ctx) : 0;
+    if (ctx.context.status !== 'completed')
+        return 0;
+    for (let i = 1; i < arr.length; i++) {
+        acc = callCallable(cb, [acc, arr[i], i], ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+    }
+    return acc;
+};
+const stdlibSort = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'sort', ctx);
+    if (arr === null)
+        return 0;
+    const size = arr[0] | 0;
+    const slice = new Array(size);
+    for (let i = 0; i < size; i++)
+        slice[i] = arr[i + 1];
+    const cb = args.length >= 2 ? resolveCallable(args[1], ctx) : null;
+    if (cb !== null) {
+        slice.sort((a, b) => callCallable(cb, [a, b], ctx));
+    }
+    else {
+        slice.sort((a, b) => a - b);
+    }
+    if (ctx.context.status !== 'completed')
+        return 0;
+    for (let i = 0; i < size; i++)
+        arr[i + 1] = slice[i];
+    return arr[0];
+};
+const stdlibSum = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'sum', ctx);
+    if (arr === null)
+        return 0;
+    let s = 0;
+    for (let i = 1; i < arr.length; i++)
+        s += arr[i];
+    return s;
+};
+const stdlibFind = (args, ctx) => {
+    const arr = requireArray(resolveArrayName(args[0]), 'find', ctx);
+    if (arr === null)
+        return 0;
+    const cb = resolveCallable(args[1], ctx);
+    if (cb === null)
+        return 0;
+    for (let i = 1; i < arr.length; i++) {
+        const r = callCallable(cb, [arr[i], i], ctx);
+        if (ctx.context.status !== 'completed')
+            return 0;
+        if (r !== 0)
+            return i;
+    }
+    return 0;
+};
+stdlibRegistry.set('foreach', { category: 'arrays', fn: stdlibForeach });
+stdlibRegistry.set('mapmut', { category: 'arrays', fn: stdlibMapMut });
+stdlibRegistry.set('map', { category: 'arrays', fn: stdlibMap });
+stdlibRegistry.set('reduce', { category: 'arrays', fn: stdlibReduce });
+stdlibRegistry.set('sort', { category: 'arrays', fn: stdlibSort });
+stdlibRegistry.set('sum', { category: 'arrays', fn: stdlibSum });
+stdlibRegistry.set('find', { category: 'arrays', fn: stdlibFind });
 export class Trace {
     body;
     tokens;
@@ -496,29 +924,46 @@ export class Trace {
             // scan and parse
             let kind = 0 /* TokenKind.null */;
             const ops = findOperator ? operators : operands;
-            match = null;
+            let matched = null;
             for (let i = 0; i < ops.length; i++) {
                 const o = ops[i];
-                match = o.regex.exec(stringLeft);
-                if (match !== null) {
-                    kind = o.kind;
-                    break;
+                if (o.regex !== undefined) {
+                    const m = o.regex.exec(stringLeft);
+                    if (m !== null) {
+                        matched = m[0];
+                        kind = o.kind;
+                        break;
+                    }
+                }
+                else if (o.scan !== undefined) {
+                    const m = o.scan(stringLeft);
+                    if (m !== null) {
+                        matched = m;
+                        kind = o.kind;
+                        break;
+                    }
                 }
             }
-            if (match === null) {
+            if (matched === null) {
                 const offset = preprocessed.length - stringLeft.length;
                 const contextStart = Math.max(0, offset - 20);
                 const snippet = preprocessed.substring(contextStart, offset + 30);
                 const col = offset - contextStart;
                 throw new Error(`Syntax error at offset ${offset}: unexpected ${findOperator ? 'operator' : 'operand'}\n  ${snippet}\n  ${' '.repeat(col)}^`);
             }
+            // Code block sugar: `{ body }` becomes anonymous function `() => { body }`.
+            // The scan rule already mapped it to TokenKind.aFunction; rewrite the
+            // matched string so downstream handling sees a complete function token.
+            if (kind === 13 /* TokenKind.aFunction */ && matched[0] === '{') {
+                matched = '()=>' + matched;
+            }
             // remove consumed text from string
-            stringLeft = stringLeft.substring(match[0].length);
+            stringLeft = stringLeft.substring(matched.length);
             if (kind === 50 /* TokenKind.beep */) {
                 tokens.push({
                     kind: 50 /* TokenKind.beep */,
                     value: NaN,
-                    string: match[0].substring(1, match[0].length - 1)
+                    string: matched.substring(1, matched.length - 1)
                 });
                 // see if parsing is done
                 if (stringLeft.length === 0) {
@@ -532,7 +977,7 @@ export class Trace {
                 continue;
             }
             if (params.length > 0 && kind === 1 /* TokenKind.variable */) {
-                const iof = params.indexOf(match[0]);
+                const iof = params.indexOf(matched);
                 if (iof !== -1) {
                     // variable references a parameter
                     tokens.push({
@@ -541,7 +986,7 @@ export class Trace {
                         string: '&'
                     });
                     kind = 3 /* TokenKind.literal */;
-                    match[0] = (iof + 1).toFixed(0);
+                    matched = (iof + 1).toFixed(0);
                 }
             }
             // parenthesis insertion
@@ -594,28 +1039,28 @@ export class Trace {
             // push the token
             const token = {
                 kind,
-                value: parseFloat(match[0]),
-                string: match[0]
+                value: parseFloat(matched),
+                string: matched
             };
             if (kind === 5 /* TokenKind.literalArray */) {
-                token.parsedValues = match[0].split('|').map(parseFloat);
+                token.parsedValues = matched.split('|').map(parseFloat);
             }
             else if (kind === 11 /* TokenKind.functionCall */ || kind === 12 /* TokenKind.tailCall */) {
-                const callArgStrings = parseCallArgs(match[0]);
+                const callArgStrings = parseCallArgs(matched);
                 if (callArgStrings.length > 0) {
                     token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg));
                 }
             }
             else if (kind === 47 /* TokenKind.arrayRead */) {
-                const bracketPos = match[0].indexOf('[');
-                const indexSrc = match[0].substring(bracketPos + 1, match[0].length - 1);
+                const bracketPos = matched.indexOf('[');
+                const indexSrc = matched.substring(bracketPos + 1, matched.length - 1);
                 if (indexSrc.length > 0) {
                     token.parsedArgs = [Trace.parse(indexSrc)];
                 }
-                token.string = match[0].substring(0, bracketPos);
+                token.string = matched.substring(0, bracketPos);
             }
             else if (kind === 46 /* TokenKind.arrayCreate */) {
-                const sizeSrc = match[0].substring(1, match[0].length - 1);
+                const sizeSrc = matched.substring(1, matched.length - 1);
                 if (sizeSrc.length > 0) {
                     token.parsedArgs = [Trace.parse(sizeSrc)];
                 }
@@ -632,7 +1077,7 @@ export class Trace {
             }
         }
     }
-    run(args = [], variables = null, vars = null, functions = null, arrays = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false) {
+    run(args = [], variables = null, vars = null, functions = null, arrays = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false, stdlibCategories = defaultStdlibCategories) {
         const frames = [];
         let fn = '';
         let script = '';
@@ -829,6 +1274,26 @@ export class Trace {
                             break;
                         }
                         fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('));
+                        // Standard library dispatch — runs synchronously without pushing a
+                        // frame, since each stdlib function controls its own execution.
+                        {
+                            const stdEntry = stdlibRegistry.get(fn);
+                            if (stdEntry !== undefined && stdlibCategories.has(stdEntry.category)) {
+                                const stdCtx = {
+                                    vars, functions, arrays, rand,
+                                    executionLimit, startedAt: context.startedAt, maxSteps,
+                                    context, strict, stdlibCategories, frame: f
+                                };
+                                val = stdEntry.fn(t.parsedArgs ?? [], stdCtx);
+                                if (context.status !== 'completed') {
+                                    this.lastRunTime = performance.now() - context.startedAt;
+                                    this.lastRunSteps = context.steps;
+                                    this.lastRunStatus = context.status;
+                                    return 0;
+                                }
+                                break;
+                            }
+                        }
                         if (functions.has(fn)) {
                             const ms = functions.get(fn);
                             const parsedArgs = t.parsedArgs;
@@ -848,7 +1313,7 @@ export class Trace {
                                 }
                                 const argValue = argTrace === undefined
                                     ? 0
-                                    : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict);
+                                    : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories);
                                 if (context.status !== 'completed') {
                                     this.lastRunTime = performance.now() - context.startedAt;
                                     this.lastRunSteps = context.steps;
@@ -913,7 +1378,7 @@ export class Trace {
                     case 47 /* TokenKind.arrayRead */: {
                         const arrName = t.string;
                         const indexTrace = t.parsedArgs?.[0];
-                        const idxRaw = indexTrace === undefined ? 0 : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0);
+                        const idxRaw = indexTrace === undefined ? 0 : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
                             this.lastRunTime = performance.now() - context.startedAt;
                             this.lastRunSteps = context.steps;
@@ -941,7 +1406,7 @@ export class Trace {
                     }
                     case 46 /* TokenKind.arrayCreate */: {
                         const sizeTrace = t.parsedArgs?.[0];
-                        const sizeRaw = sizeTrace === undefined ? 0 : (sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0);
+                        const sizeRaw = sizeTrace === undefined ? 0 : (sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
                             this.lastRunTime = performance.now() - context.startedAt;
                             this.lastRunSteps = context.steps;
@@ -1124,7 +1589,7 @@ export class Trace {
             : createSeededRandom(options.randomSeed));
         let value = null;
         try {
-            value = this.run(options.args ?? [], options.variables ?? null, vars, functions, arrays, rand, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false);
+            value = this.run(options.args ?? [], options.variables ?? null, vars, functions, arrays, rand, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false, resolveStdlibCategories(options.stdlib));
         }
         catch (e) {
             context.status = 'error';

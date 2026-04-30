@@ -496,3 +496,117 @@ describe('code blocks', () => {
     expect(runTrace('x = 1; {x = 9}; x')).toBe(9)
   })
 })
+
+describe('stdlib loops', () => {
+  it('while runs body while condition holds', () => {
+    expect(runTrace('i = 0; while(i < 3, i++); i')).toBe(3)
+  })
+
+  it('while accepts a code block body', () => {
+    expect(runTrace('i = 0; t = 0; while(i < 4, { t += i; i++ }); t')).toBe(6)
+  })
+
+  it('while accepts an anonymous function body', () => {
+    expect(runTrace('i = 0; while(i < 3, () => i++); i')).toBe(3)
+  })
+
+  it('while accepts a function reference body', () => {
+    expect(runTrace('i = 0; bump()=>{i++}; while(i < 3, bump); i')).toBe(3)
+  })
+
+  it('for runs init once, then body until cond fails', () => {
+    expect(runTrace('for(i = 0, i < 5, i++); i')).toBe(5)
+  })
+
+  it('for handles compound body via code block', () => {
+    expect(runTrace('t = 0; for(i = 1, i <= 5, { t += i; i++ }); t')).toBe(15)
+  })
+
+  it('dowhile runs body at least once', () => {
+    expect(runTrace('i = 5; dowhile(i++, i < 3); i')).toBe(6)
+  })
+
+  it('dowhile increments until condition fails', () => {
+    expect(runTrace('i = 0; dowhile(i++, i < 3); i')).toBe(3)
+  })
+
+  it('supports nested loops', () => {
+    expect(runTrace('t = 0; i = 0; while(i < 3, { j = 0; while(j < 4, { t++; j++ }); i++ }); t')).toBe(12)
+  })
+
+  it('infinite loop terminates safely under step limit', () => {
+    const r = runTraceWithOptions('while(1, x++)', { maxSteps: 200 })
+    expect(r.status).toBe('step-limit')
+  })
+})
+
+describe('stdlib arrays', () => {
+  it('foreach visits every element', () => {
+    expect(runTrace('arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3; t=0; foreach(arr, (x) => t += x); t')).toBe(6)
+  })
+
+  it('mapmut mutates the array in place', () => {
+    expect(runTrace('arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3; mapmut(arr, (x) => x * 10); arr[1]+arr[2]+arr[3]')).toBe(60)
+  })
+
+  it('map creates a new array and leaves the source intact', () => {
+    expect(runTrace('arr = [2]; arr[1]=4; arr[2]=5; out = map(arr, (x) => x * 10); arr[1]*1000+arr[2]*100+out[1]+out[2]')).toBe(4590)
+  })
+
+  it('map result is assignable and indexable', () => {
+    expect(runTrace('arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3; double(x)=>{x*2}; out = map(arr, double); out[1]+out[2]+out[3]')).toBe(12)
+  })
+
+  it('reduce folds elements with an accumulator', () => {
+    expect(runTrace('arr = [3]; arr[1]=10; arr[2]=20; arr[3]=30; reduce(arr, (a, b) => a + b)')).toBe(60)
+  })
+
+  it('reduce accepts an initial value as the third arg', () => {
+    expect(runTrace('arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3; reduce(arr, (a, b) => a + b, 100)')).toBe(106)
+  })
+
+  it('sort sorts ascending by default', () => {
+    expect(runTrace('arr = [4]; arr[1]=3; arr[2]=1; arr[3]=4; arr[4]=2; sort(arr); arr[1]*1000+arr[2]*100+arr[3]*10+arr[4]')).toBe(1234)
+  })
+
+  it('sort accepts a custom comparator', () => {
+    expect(runTrace('arr = [3]; arr[1]=1; arr[2]=3; arr[3]=2; sort(arr, (a, b) => b - a); arr[1]*100+arr[2]*10+arr[3]')).toBe(321)
+  })
+
+  it('sum returns the total of all elements', () => {
+    expect(runTrace('arr = [3]; arr[1]=10; arr[2]=20; arr[3]=30; sum(arr)')).toBe(60)
+  })
+
+  it('find returns the 1-based index of the first match (0 when none)', () => {
+    expect(runTrace('arr = [3]; arr[1]=5; arr[2]=10; arr[3]=15; find(arr, (x) => x == 10)')).toBe(2)
+    expect(runTrace('arr = [3]; arr[1]=5; arr[2]=10; arr[3]=15; find(arr, (x) => x == 99)')).toBe(0)
+  })
+})
+
+describe('stdlib categories option', () => {
+  it('disables loops only', () => {
+    const r = runTraceWithOptions('i = 0; while(i < 3, i++); i', {
+      stdlib: { loops: false }
+    })
+    expect(r.value).toBe(0)
+    expect(r.status).toBe('completed')
+  })
+
+  it('disables arrays only', () => {
+    const r = runTraceWithOptions('arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3; sum(arr)', {
+      stdlib: { arrays: false }
+    })
+    expect(r.value).toBe(0)
+  })
+
+  it('disables the entire stdlib when set to false', () => {
+    const r = runTraceWithOptions('i = 0; while(i < 3, i++); i', { stdlib: false })
+    expect(r.value).toBe(0)
+  })
+
+  it('reports an error for disabled stdlib calls in strict mode', () => {
+    const r = runTraceWithOptions('while(1, 1)', { strict: true, stdlib: false })
+    expect(r.status).toBe('error')
+    expect(r.error).toContain('unknown function')
+  })
+})

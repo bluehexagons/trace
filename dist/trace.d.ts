@@ -57,6 +57,15 @@ type TraceToken = {
     string: string;
     parsedArgs?: Trace[];
     parsedValues?: number[];
+    callable?: {
+        trace: Trace;
+        params: string[];
+    };
+};
+export type TraceStdlibCategory = 'loops' | 'arrays';
+export type TraceStdlibOptions = {
+    loops?: boolean;
+    arrays?: boolean;
 };
 export type TraceRunOptions = {
     args?: number[];
@@ -69,6 +78,7 @@ export type TraceRunOptions = {
     maxSteps?: number;
     persist?: boolean;
     strict?: boolean;
+    stdlib?: TraceStdlibOptions | boolean;
 };
 export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit' | 'error';
 export type TraceRunResult = {
@@ -104,7 +114,7 @@ export declare class Trace {
     static parse(s: string): Trace;
     run(args?: number[], variables?: ({
         [s: string]: number;
-    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), arrays?: (Map<string, Float64Array> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean): number | null;
+    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), arrays?: (Map<string, Float64Array> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean, stdlibCategories?: ReadonlySet<TraceStdlibCategory>): number | null;
     runWithOptions(options?: TraceRunOptions): TraceRunResult;
 }
 export declare const runTrace: (script: string, ...args: number[]) => number | null;

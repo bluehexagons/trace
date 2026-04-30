@@ -330,6 +330,100 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
 
 Plain assignment (`x = 5`) is always allowed in strict mode — it declares the variable. All errors are surfaced in `result.error` and set `result.status` to `"error"`.
 
+## code blocks and nested braces
+
+Curly-brace bodies nest properly, so functions, anonymous functions and code
+blocks can be embedded in each other:
+
+```
+outer()=>{ inner()=>{ x = 5 }; inner(); x }
+outer() // 5
+```
+
+A bare `{ body }` at an operand position is sugar for an immediately-invoked
+anonymous function `()=>{ body }`. It runs in the surrounding scope:
+
+```
+x = 1; { x = 9 }; x   // 9
+{ a = 1 + 2; a * 10 } // 30
+```
+
+This also lets you pass blocks of code as arguments to functions in the
+standard library:
+
+```
+i = 0; while(i < 3, { i++ }); i // 3
+```
+
+## standard library
+
+A small set of built-in functions is available by category. Each one accepts
+its callable arguments as a function reference, an anonymous function, or a
+code block.
+
+### loops
+
+| Function | Behavior |
+|---|---|
+| `while(cond, body)` | runs `body` while `cond` is non-zero |
+| `for(init, cond, body)` | runs `init` once, then `body` while `cond` is non-zero |
+| `dowhile(body, cond)` | runs `body`, then continues while `cond` is non-zero |
+
+```
+i = 0; while(i < 3, i++); i           // 3
+for(i = 0, i < 5, { i++ }); i         // 5
+i = 0; dowhile(i++, i < 3); i         // 3
+i = 0; bump()=>{ i++ }; while(i < 3, bump); i // 3
+```
+
+### arrays
+
+| Function | Behavior |
+|---|---|
+| `foreach(arr, fn)` | calls `fn(elem, index)` for each element |
+| `mapmut(arr, fn)` | replaces every element with `fn(elem, index)` in place |
+| `map(arr, fn)` | returns a new array with `fn(elem, index)` per element |
+| `reduce(arr, fn, init?)` | folds with `fn(acc, elem, index)`; `init` defaults to `arr[1]` |
+| `sort(arr, cmp?)` | sorts in place; `cmp(a, b)` defaults to ascending |
+| `sum(arr)` | returns the total of all elements |
+| `find(arr, pred)` | returns the 1-based index of the first element where `pred(elem, index)` is non-zero (`0` if none) |
+
+`map` allocates a new array and returns it via assignment, so the source array
+is left untouched:
+
+```
+arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3;
+out = map(arr, (x) => x * 10);
+// arr is unchanged; out[1]=10, out[2]=20, out[3]=30
+```
+
+`mapmut` mutates the source in place:
+
+```
+arr = [3]; arr[1]=1; arr[2]=2; arr[3]=3;
+mapmut(arr, (x) => x * 10);
+// arr[1]=10, arr[2]=20, arr[3]=30
+```
+
+### enabling and disabling categories
+
+Categories are configured via the `stdlib` option on `runTraceWithOptions`
+(or `Trace.runWithOptions`). All categories are enabled by default.
+
+```js
+// disable everything
+runTraceWithOptions(src, { stdlib: false })
+
+// disable only loops
+runTraceWithOptions(src, { stdlib: { loops: false } })
+
+// explicit enable list
+runTraceWithOptions(src, { stdlib: { loops: true, arrays: false } })
+```
+
+Disabled stdlib calls behave like any other unknown function: they return `0`
+in default mode, or raise a runtime error under `strict: true`.
+
 # parse errors
 
 Parse errors include the character offset in the preprocessed source and a snippet with a `^` pointer:

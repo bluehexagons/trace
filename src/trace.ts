@@ -432,7 +432,14 @@ for (const t of [TokenKind.gt, TokenKind.lt, TokenKind.gteq, TokenKind.lteq, Tok
   opLevels.set(t, 1)
 }
 
-type TraceToken = { kind: TokenKind, value: number, string: string, parsedArgs?: Trace[], parsedValues?: number[] }
+type TraceToken = { kind: TokenKind, value: number, string: string, parsedArgs?: Trace[], parsedValues?: number[], callable?: { trace: Trace, params: string[] } }
+
+export type TraceStdlibCategory = 'loops' | 'arrays'
+
+export type TraceStdlibOptions = {
+  loops?: boolean
+  arrays?: boolean
+}
 
 export type TraceRunOptions = {
   args?: number[]
@@ -443,7 +450,22 @@ export type TraceRunOptions = {
   maxSteps?: number
   persist?: boolean
   strict?: boolean
+  stdlib?: TraceStdlibOptions | boolean
 }
+
+const allStdlibCategories: ReadonlyArray<TraceStdlibCategory> = ['loops', 'arrays']
+
+const resolveStdlibCategories = (opt: TraceStdlibOptions | boolean | undefined): Set<TraceStdlibCategory> => {
+  if (opt === false) return new Set()
+  const out = new Set<TraceStdlibCategory>()
+  const o = (opt === undefined || opt === true) ? {} : opt
+  for (const c of allStdlibCategories) {
+    if (o[c] !== false) out.add(c)
+  }
+  return out
+}
+
+const defaultStdlibCategories: ReadonlySet<TraceStdlibCategory> = new Set(allStdlibCategories)
 
 export type TraceRunStatus = 'completed' | 'timeout' | 'step-limit' | 'error'
 
@@ -640,6 +662,271 @@ const intoOperands = new Set([
   TokenKind.not,
   TokenKind.startGroup,
 ])
+
+type StdlibContext = {
+  vars: Map<string, number>
+  functions: Map<string, Trace>
+  arrays: Map<string, Float64Array>
+  rand: () => number
+  executionLimit: number
+  startedAt: number
+  maxSteps: number
+  context: TraceRunContext
+  strict: boolean
+  stdlibCategories: ReadonlySet<TraceStdlibCategory>
+  frame: StackFrame
+}
+
+type StdlibFn = (args: Trace[], ctx: StdlibContext) => number
+
+const stdlibRegistry = new Map<string, { category: TraceStdlibCategory, fn: StdlibFn }>()
+
+const evalArg = (arg: Trace | undefined, ctx: StdlibContext): number => {
+  if (arg === undefined) return 0
+  return +(arg.run(
+    [], null, ctx.vars, ctx.functions, ctx.arrays, ctx.rand,
+    ctx.executionLimit, ctx.startedAt, ctx.maxSteps, ctx.context, ctx.strict,
+    ctx.stdlibCategories
+  ) ?? 0)
+}
+
+// Resolve a callable from a parsedArg (Trace) — accepts a bare function-name
+// reference, an anonymous function/lambda, or a code-block (which the parser
+// has already lowered to an anonymous function token).
+const resolveCallable = (arg: Trace | undefined, ctx: StdlibContext): { trace: Trace, params: string[] } | null => {
+  if (arg === undefined) return null
+  const tk = arg.tokens
+  if (tk.length !== 1) return null
+  const t = tk[0]
+  if (t.kind === TokenKind.variable) {
+    const fnRef = ctx.functions.get(t.string)
+    if (fnRef !== undefined) return { trace: fnRef, params: fnRef.callParams }
+    return null
+  }
+  if (
+    t.kind === TokenKind.aFunction || t.kind === TokenKind.function ||
+    t.kind === TokenKind.aLambda || t.kind === TokenKind.lambda
+  ) {
+    if (t.callable === undefined) {
+      const isFn = t.kind === TokenKind.function || t.kind === TokenKind.aFunction
+      const body = isFn
+        ? t.string.substring(t.string.indexOf('{') + 1, t.string.length - 1)
+        : t.string.substring(t.string.indexOf('>') + 1, t.string.endsWith(';') ? t.string.length - 1 : t.string.length)
+      const sub = Trace.parse(body)
+      sub.callParams = parseParamList(t.string)
+      t.callable = { trace: sub, params: sub.callParams }
+    }
+    return t.callable
+  }
+  return null
+}
+
+const callCallable = (
+  callable: { trace: Trace, params: string[] },
+  callerArgs: number[],
+  ctx: StdlibContext
+): number => {
+  // Set declared parameters as globals (mirrors the existing function-call
+  // convention) so named functions see their named params.
+  for (let i = 0; i < callable.params.length; i++) {
+    ctx.vars.set(callable.params[i], callerArgs[i] ?? 0)
+  }
+  return +(callable.trace.run(
+    callerArgs, null, ctx.vars, ctx.functions, ctx.arrays, ctx.rand,
+    ctx.executionLimit, ctx.startedAt, ctx.maxSteps, ctx.context, ctx.strict,
+    ctx.stdlibCategories
+  ) ?? 0)
+}
+
+const resolveArrayName = (arg: Trace | undefined): string | null => {
+  if (arg === undefined) return null
+  const tk = arg.tokens
+  if (tk.length === 1 && tk[0].kind === TokenKind.variable) return tk[0].string
+  return null
+}
+
+const requireArray = (name: string | null, op: string, ctx: StdlibContext): Float64Array | null => {
+  if (name === null) {
+    if (ctx.strict) throw new Error(`Runtime error: ${op} requires a bare array variable as first argument`)
+    return null
+  }
+  const arr = ctx.arrays.get(name)
+  if (arr === undefined) {
+    if (ctx.strict) throw new Error(`Runtime error: ${op} on unknown array "${name}"`)
+    return null
+  }
+  return arr
+}
+
+// --- loops ---
+
+const evalCondOrCallable = (
+  arg: Trace | undefined,
+  callable: { trace: Trace, params: string[] } | null,
+  ctx: StdlibContext
+): number => {
+  if (callable !== null) return callCallable(callable, [], ctx)
+  return evalArg(arg, ctx)
+}
+
+const stdlibWhile: StdlibFn = (args, ctx) => {
+  if (args.length < 2) return 0
+  const cond = resolveCallable(args[0], ctx)
+  const body = resolveCallable(args[1], ctx)
+  let last = 0
+  while (true) {
+    const c = evalCondOrCallable(args[0], cond, ctx)
+    if (ctx.context.status !== 'completed') return 0
+    if (c === 0) break
+    last = evalCondOrCallable(args[1], body, ctx)
+    if (ctx.context.status !== 'completed') return 0
+  }
+  return last
+}
+
+const stdlibFor: StdlibFn = (args, ctx) => {
+  if (args.length < 3) return 0
+  const init = resolveCallable(args[0], ctx)
+  const cond = resolveCallable(args[1], ctx)
+  const body = resolveCallable(args[2], ctx)
+  evalCondOrCallable(args[0], init, ctx)
+  if (ctx.context.status !== 'completed') return 0
+  let last = 0
+  while (true) {
+    const c = evalCondOrCallable(args[1], cond, ctx)
+    if (ctx.context.status !== 'completed') return 0
+    if (c === 0) break
+    last = evalCondOrCallable(args[2], body, ctx)
+    if (ctx.context.status !== 'completed') return 0
+  }
+  return last
+}
+
+const stdlibDoWhile: StdlibFn = (args, ctx) => {
+  if (args.length < 2) return 0
+  const body = resolveCallable(args[0], ctx)
+  const cond = resolveCallable(args[1], ctx)
+  let last = 0
+  while (true) {
+    last = evalCondOrCallable(args[0], body, ctx)
+    if (ctx.context.status !== 'completed') return 0
+    const c = evalCondOrCallable(args[1], cond, ctx)
+    if (ctx.context.status !== 'completed') return 0
+    if (c === 0) break
+  }
+  return last
+}
+
+stdlibRegistry.set('while', { category: 'loops', fn: stdlibWhile })
+stdlibRegistry.set('for', { category: 'loops', fn: stdlibFor })
+stdlibRegistry.set('dowhile', { category: 'loops', fn: stdlibDoWhile })
+
+// --- arrays ---
+
+const stdlibForeach: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'foreach', ctx)
+  if (arr === null) return 0
+  const cb = resolveCallable(args[1], ctx)
+  if (cb === null) return 0
+  let last = 0
+  for (let i = 1; i < arr.length; i++) {
+    last = callCallable(cb, [arr[i], i], ctx)
+    if (ctx.context.status !== 'completed') return 0
+  }
+  return last
+}
+
+const stdlibMapMut: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'mapmut', ctx)
+  if (arr === null) return 0
+  const cb = resolveCallable(args[1], ctx)
+  if (cb === null) return arr[0]
+  for (let i = 1; i < arr.length; i++) {
+    arr[i] = callCallable(cb, [arr[i], i], ctx)
+    if (ctx.context.status !== 'completed') return 0
+  }
+  return arr[0]
+}
+
+const stdlibMap: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'map', ctx)
+  if (arr === null) return 0
+  const out = new Float64Array(arr.length)
+  out[0] = arr[0]
+  const cb = resolveCallable(args[1], ctx)
+  if (cb !== null) {
+    for (let i = 1; i < arr.length; i++) {
+      out[i] = callCallable(cb, [arr[i], i], ctx)
+      if (ctx.context.status !== 'completed') return 0
+    }
+  } else {
+    for (let i = 1; i < arr.length; i++) out[i] = arr[i]
+  }
+  // Hand the new array off via the caller's stack frame so that
+  // `result = map(arr, fn)` assigns it like a normal arrayCreate.
+  ctx.frame.newArray = out
+  return out[0]
+}
+
+const stdlibReduce: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'reduce', ctx)
+  if (arr === null) return 0
+  const cb = resolveCallable(args[1], ctx)
+  if (cb === null) return 0
+  let acc = args.length >= 3 ? evalArg(args[2], ctx) : 0
+  if (ctx.context.status !== 'completed') return 0
+  for (let i = 1; i < arr.length; i++) {
+    acc = callCallable(cb, [acc, arr[i], i], ctx)
+    if (ctx.context.status !== 'completed') return 0
+  }
+  return acc
+}
+
+const stdlibSort: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'sort', ctx)
+  if (arr === null) return 0
+  const size = arr[0] | 0
+  const slice: number[] = new Array(size)
+  for (let i = 0; i < size; i++) slice[i] = arr[i + 1]
+  const cb = args.length >= 2 ? resolveCallable(args[1], ctx) : null
+  if (cb !== null) {
+    slice.sort((a, b) => callCallable(cb, [a, b], ctx))
+  } else {
+    slice.sort((a, b) => a - b)
+  }
+  if (ctx.context.status !== 'completed') return 0
+  for (let i = 0; i < size; i++) arr[i + 1] = slice[i]
+  return arr[0]
+}
+
+const stdlibSum: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'sum', ctx)
+  if (arr === null) return 0
+  let s = 0
+  for (let i = 1; i < arr.length; i++) s += arr[i]
+  return s
+}
+
+const stdlibFind: StdlibFn = (args, ctx) => {
+  const arr = requireArray(resolveArrayName(args[0]), 'find', ctx)
+  if (arr === null) return 0
+  const cb = resolveCallable(args[1], ctx)
+  if (cb === null) return 0
+  for (let i = 1; i < arr.length; i++) {
+    const r = callCallable(cb, [arr[i], i], ctx)
+    if (ctx.context.status !== 'completed') return 0
+    if (r !== 0) return i
+  }
+  return 0
+}
+
+stdlibRegistry.set('foreach', { category: 'arrays', fn: stdlibForeach })
+stdlibRegistry.set('mapmut', { category: 'arrays', fn: stdlibMapMut })
+stdlibRegistry.set('map', { category: 'arrays', fn: stdlibMap })
+stdlibRegistry.set('reduce', { category: 'arrays', fn: stdlibReduce })
+stdlibRegistry.set('sort', { category: 'arrays', fn: stdlibSort })
+stdlibRegistry.set('sum', { category: 'arrays', fn: stdlibSum })
+stdlibRegistry.set('find', { category: 'arrays', fn: stdlibFind })
 
 export class Trace {
   static logger = console.log
@@ -866,7 +1153,8 @@ export class Trace {
     executionStart: number = performance.now(),
     maxSteps = Number.POSITIVE_INFINITY,
     context: TraceRunContext = { startedAt: executionStart, steps: 0, status: 'completed' },
-    strict = false
+    strict = false,
+    stdlibCategories: ReadonlySet<TraceStdlibCategory> = defaultStdlibCategories
   ) {
     const frames = [] as StackFrame[]
     let fn = ''
@@ -1086,6 +1374,28 @@ export class Trace {
             break
           }
           fn = t.string.substring(tc ? 1 : 0, t.string.indexOf('('))
+
+          // Standard library dispatch — runs synchronously without pushing a
+          // frame, since each stdlib function controls its own execution.
+          {
+            const stdEntry = stdlibRegistry.get(fn)
+            if (stdEntry !== undefined && stdlibCategories.has(stdEntry.category)) {
+              const stdCtx: StdlibContext = {
+                vars, functions, arrays, rand,
+                executionLimit, startedAt: context.startedAt, maxSteps,
+                context, strict, stdlibCategories, frame: f
+              }
+              val = stdEntry.fn(t.parsedArgs ?? [], stdCtx)
+              if (context.status !== 'completed') {
+                this.lastRunTime = performance.now() - context.startedAt
+                this.lastRunSteps = context.steps
+                this.lastRunStatus = context.status
+                return 0
+              }
+              break
+            }
+          }
+
           if (functions.has(fn)) {
             const ms = functions.get(fn) as Trace
             const parsedArgs = t.parsedArgs
@@ -1108,7 +1418,7 @@ export class Trace {
 
               const argValue = argTrace === undefined
                 ? 0
-                : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict)
+                : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories)
               if (context.status !== 'completed') {
                 this.lastRunTime = performance.now() - context.startedAt
                 this.lastRunSteps = context.steps
@@ -1177,7 +1487,7 @@ export class Trace {
           const arrName = t.string
           const indexTrace = t.parsedArgs?.[0]
           const idxRaw = indexTrace === undefined ? 0 : (
-            indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0
+            indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0
           )
           if (context.status !== 'completed') {
             this.lastRunTime = performance.now() - context.startedAt
@@ -1206,7 +1516,7 @@ export class Trace {
         case TokenKind.arrayCreate: {
           const sizeTrace = t.parsedArgs?.[0]
           const sizeRaw = sizeTrace === undefined ? 0 : (
-            sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict) ?? 0
+            sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0
           )
           if (context.status !== 'completed') {
             this.lastRunTime = performance.now() - context.startedAt
@@ -1432,7 +1742,8 @@ export class Trace {
         startedAt,
         options.maxSteps ?? Number.POSITIVE_INFINITY,
         context,
-        options.strict ?? false
+        options.strict ?? false,
+        resolveStdlibCategories(options.stdlib)
       )
     } catch (e) {
       context.status = 'error'
