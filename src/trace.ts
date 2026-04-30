@@ -410,6 +410,7 @@ class StackFrame {
   writeIndex = 0       // index captured by assignment operator
   arrayWrite = false
   newArray: (Float64Array | null) = null
+  valFn: (Trace | null) = null
   sign: -1 | 1 = 1
   not = false
   ptr = false
@@ -433,7 +434,7 @@ const applySetOp = (op: TokenKind, cur: number, val: number): number => {
   }
 }
 
-const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<string, Float64Array>, strict = false) => {
+const closeStatement = (f: StackFrame, vars: Map<string, number>, functions: Map<string, Trace>, arrays: Map<string, Float64Array>, strict = false) => {
   if (f.newArray !== null) {
     if (f.setVar !== '') {
       arrays.set(f.setVar, f.newArray)
@@ -443,14 +444,26 @@ const closeStatement = (f: StackFrame, vars: Map<string, number>, arrays: Map<st
     f.setVar = ''
     f.pendingArray = ''
     f.arrayWrite = false
+    f.valFn = null
     return
   }
 
   if (f.setVar === '') {
     f.pendingArray = ''
     f.arrayWrite = false
+    f.valFn = null
     return
   }
+
+  if (f.valFn !== null && f.setOp === TokenKind.set) {
+    functions.set(f.setVar, f.valFn)
+    f.value = 0
+    f.setVar = ''
+    f.valFn = null
+    f.arrayWrite = false
+    return
+  }
+  f.valFn = null
 
   if (f.arrayWrite) {
     const arr = arrays.get(f.writeArray)
@@ -836,10 +849,16 @@ export class Trace {
           break
 
         case TokenKind.variable:
-          if (strict && !vars.has(t.string) && !arrays.has(t.string) && !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
+          if (strict && !vars.has(t.string) && !arrays.has(t.string) && !functions.has(t.string) && !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
             throw new Error(`Runtime error: unknown variable "${t.string}"`)
           }
-          val = vars.get(t.string) ?? arrays.get(t.string)?.[0] ?? 0
+          if (!vars.has(t.string) && functions.has(t.string)) {
+            f.valFn = functions.get(t.string) as Trace
+            val = 0
+          } else {
+            f.valFn = null
+            val = vars.get(t.string) ?? arrays.get(t.string)?.[0] ?? 0
+          }
           f.lastVar = t.string
           f.pendingArray = ''
           break
@@ -925,6 +944,16 @@ export class Trace {
               }
 
               const argTrace = parsedArgs?.[i]
+
+              // Bare function name as argument — pass the Trace reference directly
+              if (argTrace !== undefined && argTrace.tokens.length === 1 && argTrace.tokens[0].kind === TokenKind.variable) {
+                const fnRef = functions.get(argTrace.tokens[0].string)
+                if (fnRef !== undefined) {
+                  functions.set(param, fnRef)
+                  continue
+                }
+              }
+
               const argValue = argTrace === undefined
                 ? 0
                 : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict)
@@ -1043,7 +1072,7 @@ export class Trace {
 
         case TokenKind.statement:
         case TokenKind.separator:
-          closeStatement(f, vars, arrays, strict)
+          closeStatement(f, vars, functions, arrays, strict)
           f.lastValue = 0
           f.value = 0
           break
@@ -1124,6 +1153,9 @@ export class Trace {
         }
 
         //operand
+        if (f.sign !== 1 || f.not || f.ptr) {
+          f.valFn = null
+        }
         val = val * f.sign
         f.sign = 1
         if (f.not) {
@@ -1135,6 +1167,11 @@ export class Trace {
           f.ptr = false
         }
         f.lastValue = f.value
+
+        // Function ref only survives a plain add where both operands are zero
+        if (f.operator !== TokenKind.add || f.value !== 0 || val !== 0) {
+          f.valFn = null
+        }
 
         switch (f.operator) {
         case TokenKind.add:
@@ -1203,7 +1240,7 @@ export class Trace {
         }
       }
 
-      closeStatement(f, vars, arrays, strict)
+      closeStatement(f, vars, functions, arrays, strict)
       value = f.value
     }
 

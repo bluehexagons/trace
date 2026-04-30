@@ -278,6 +278,45 @@ describe('script parameters', () => {
   })
 })
 
+describe('first-class functions', () => {
+  it('stores a function reference in a variable and calls it', () => {
+    expect(runTrace('double(x)=>{x*2}; f = double; f(5)')).toBe(10)
+  })
+
+  it('aliases chain: g = f = double', () => {
+    expect(runTrace('double(x)=>{x*2}; f = double; g = f; g(4)')).toBe(8)
+  })
+
+  it('passes a function by name to a higher-order function', () => {
+    expect(runTrace('double(x)=>{x*2}; apply(fn,x)=>{fn(x)}; apply(double,3)')).toBe(6)
+  })
+
+  it('map over an array via a function reference', () => {
+    // Nested {} inside function bodies is not supported, so the loop step is
+    // a separate named function that recurses via mapStep(fn,n).
+    const script = [
+      'double(x)=>{x*2}',
+      'mapStep(fn,n)=>{res[i]=fn(i);i++<=n?mapStep(fn,n):0}',
+      'mapArr(fn,n)=>{res=[n];i=1;mapStep(fn,n)}',
+      'mapArr(double,3)',
+      'res[1]+res[2]+res[3]'
+    ].join(';')
+    expect(runTrace(script)).toBe(12)
+  })
+
+  it('function ref has numeric value 0', () => {
+    expect(runTrace('double(x)=>{x*2}; f = double; f + 1')).toBe(1)
+  })
+
+  it('arithmetic on a function ref name clears the ref (scalar assigned)', () => {
+    expect(runTrace('double(x)=>{x*2}; f = double + 0; f + 1')).toBe(1)
+  })
+
+  it('passing a function reference stored in a variable', () => {
+    expect(runTrace('inc(x)=>{x+1}; apply(fn,x)=>{fn(x)}; f=inc; apply(f,9)')).toBe(10)
+  })
+})
+
 describe('arrays', () => {
   it('creates an array and returns its size', () => {
     expect(runTrace('arr = [5]; arr[0]')).toBe(5)

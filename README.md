@@ -207,6 +207,40 @@ can also read args/params using pointers: `&1`, `&2`, `&variable`, etc
 
 `name() => { line1; line2; implicit return statement }`
 
+## first-class functions
+
+Function names can be assigned to variables and passed as arguments.
+
+**Store a reference:**
+```
+double(x) => { x * 2 }
+f = double
+f(5)        # 10
+```
+
+**Pass as an argument:**
+```
+apply(fn, x) => { fn(x) }
+apply(double, 5)   # 10
+```
+
+**Pass a stored reference:**
+```
+f = double
+apply(f, 5)        # 10
+```
+
+A function name in a numeric expression evaluates to `0`. Only a plain assignment (`f = name`) captures the reference — mixing it with arithmetic stores `0` instead.
+
+Because function parameters are globals (see below), a function reference passed as a parameter is available to all functions called within that scope:
+```
+mapStep(fn, n) => { res[i] = fn(i); i++ <= n ? mapStep(fn, n) : 0 }
+mapArr(fn, n)  => { res = [n]; i = 1; mapStep(fn, n) }
+double(x) => { x * 2 }
+mapArr(double, 3)
+res[1] + res[2] + res[3]   # 2 + 4 + 6 = 12
+```
+
 lambdas
 
 `name() => implicit return statement;` (note that it *must* end in a semicolon)
