@@ -1,6 +1,125 @@
 // performance is available globally in Node.js (>=16) and browsers
 
 // TODO: consider |> function calls
+
+// Returns the index of the matching close delimiter for s[startIdx], allowing
+// nested () and {} interleaved. Returns -1 if unbalanced.
+const findMatchingClose = (s: string, startIdx: number, open: string, close: string): number => {
+  let parens = 0
+  let braces = 0
+  for (let i = startIdx; i < s.length; i++) {
+    const c = s[i]
+    if (c === '(') parens++
+    else if (c === ')') {
+      parens--
+      if (parens < 0) return -1
+      if (close === ')' && parens === 0 && braces === 0) return i
+    } else if (c === '{') braces++
+    else if (c === '}') {
+      braces--
+      if (braces < 0) return -1
+      if (close === '}' && braces === 0 && parens === 0) return i
+    }
+  }
+  return -1
+}
+
+const scanAFunction = (s: string): string | null => {
+  if (s[0] !== '(') return null
+  const cp = findMatchingClose(s, 0, '(', ')')
+  if (cp === -1) return null
+  if (s[cp + 1] !== '=' || s[cp + 2] !== '>' || s[cp + 3] !== '{') return null
+  const cb = findMatchingClose(s, cp + 3, '{', '}')
+  if (cb === -1) return null
+  return s.substring(0, cb + 1)
+}
+
+const scanALambda = (s: string): string | null => {
+  if (s[0] !== '(') return null
+  const cp = findMatchingClose(s, 0, '(', ')')
+  if (cp === -1) return null
+  if (s[cp + 1] !== '=' || s[cp + 2] !== '>') return null
+  let i = cp + 3
+  while (i < s.length && s[i] !== ';') i++
+  return s.substring(0, Math.min(i + 1, s.length))
+}
+
+const scanFunction = (s: string): string | null => {
+  const nm = /^[a-zA-Z_][\w.]*/.exec(s)
+  if (nm === null) return null
+  const after = nm[0].length
+  if (s[after] !== '(') return null
+  const cp = findMatchingClose(s, after, '(', ')')
+  if (cp === -1) return null
+  if (s[cp + 1] !== '=' || s[cp + 2] !== '>' || s[cp + 3] !== '{') return null
+  const cb = findMatchingClose(s, cp + 3, '{', '}')
+  if (cb === -1) return null
+  return s.substring(0, cb + 1)
+}
+
+const scanLambda = (s: string): string | null => {
+  const nm = /^[a-zA-Z_][\w.]*/.exec(s)
+  if (nm === null) return null
+  const after = nm[0].length
+  if (s[after] !== '(') return null
+  const cp = findMatchingClose(s, after, '(', ')')
+  if (cp === -1) return null
+  if (s[cp + 1] !== '=' || s[cp + 2] !== '>') return null
+  let i = cp + 3
+  while (i < s.length && s[i] !== ';') i++
+  return s.substring(0, Math.min(i + 1, s.length))
+}
+
+const scanFunctionCall = (s: string): string | null => {
+  const nm = /^[a-zA-Z_][\w.]*/.exec(s)
+  if (nm === null) {
+    if (s.startsWith('()')) return '()'
+    return null
+  }
+  const after = nm[0].length
+  if (s[after] !== '(') return null
+  const cp = findMatchingClose(s, after, '(', ')')
+  if (cp === -1) return null
+  return s.substring(0, cp + 1)
+}
+
+const scanTailCall = (s: string): string | null => {
+  if (s[0] !== '>') return null
+  const inner = scanFunctionCall(s.substring(1))
+  if (inner === null) return null
+  return '>' + inner
+}
+
+const scanCodeBlock = (s: string): string | null => {
+  if (s[0] !== '{') return null
+  const cb = findMatchingClose(s, 0, '{', '}')
+  if (cb === -1) return null
+  return s.substring(0, cb + 1)
+}
+
+const scanBracketed = (s: string): string | null => {
+  if (s[0] !== '[') return null
+  let depth = 0
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '[') depth++
+    else if (s[i] === ']') {
+      depth--
+      if (depth === 0) return s.substring(0, i + 1)
+    }
+  }
+  return null
+}
+
+const scanArrayRead = (s: string): string | null => {
+  const nm = /^[a-zA-Z_][\w.]*/.exec(s)
+  if (nm === null) return null
+  const after = nm[0].length
+  if (s[after] !== '[') return null
+  const sub = scanBracketed(s.substring(after))
+  if (sub === null) return null
+  return s.substring(0, after + sub.length)
+}
+
 const enum TokenKind {
   null,
 
@@ -65,8 +184,14 @@ const enum TokenKind {
   beep,
 }
 
+type ScanRule = {
+  kind: TokenKind
+  regex?: RegExp
+  scan?: (s: string) => string | null
+}
+
 // find operand, [operator, operand]...
-const operands = [
+const operands: ScanRule[] = [
   {
     regex: /^@[^@]*@/,
     kind: TokenKind.beep
@@ -84,31 +209,31 @@ const operands = [
     kind: TokenKind.not
   },
   {
-    regex: /^\([^)]*\)=>\{[^}]*\}/,
+    scan: scanAFunction,
     kind: TokenKind.aFunction
   },
   {
-    regex: /^\([^)]*\)=>[^;]*;?/,
+    scan: scanALambda,
     kind: TokenKind.aLambda
   },
   {
-    regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>\{[^}]*\}/,
+    scan: scanFunction,
     kind: TokenKind.function
   },
   {
-    regex: /^[a-zA-Z_][\w.]*\([^)]*\)=>[^;]*;?/,
+    scan: scanLambda,
     kind: TokenKind.lambda
   },
   {
-    regex: /^(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
+    scan: scanFunctionCall,
     kind: TokenKind.functionCall
   },
   {
-    regex: /^>(?:[a-zA-Z_][\w.]*\((?:[^(){};]|\([^(){};]*\))*\)|\(\))/,
+    scan: scanTailCall,
     kind: TokenKind.tailCall
   },
   {
-    regex: /^[a-zA-Z_][\w.]*\[[^\]]*\]/,
+    scan: scanArrayRead,
     kind: TokenKind.arrayRead
   },
   {
@@ -136,7 +261,12 @@ const operands = [
     kind: TokenKind.startGroup
   },
   {
-    regex: /^\[[^\]]*\]/,
+    // Code block as operand: `{ body }` is sugar for `() => { body }`
+    scan: scanCodeBlock,
+    kind: TokenKind.aFunction
+  },
+  {
+    scan: scanBracketed,
     kind: TokenKind.arrayCreate
   },
   {
@@ -145,7 +275,7 @@ const operands = [
   }
 ]
 
-const operators = [
+const operators: ScanRule[] = [
   {
     regex: /^@[^@]*@/,
     kind: TokenKind.beep
@@ -374,16 +504,21 @@ const parseCallArgs = (source: string) => {
 
   const args: string[] = []
   const argSource = source.substring(start + 1, end)
-  let groupLevel = 0
+  let parenLevel = 0
+  let braceLevel = 0
   let argStart = 0
 
   for (let i = 0; i < argSource.length; i++) {
     const char = argSource[i]
     if (char === '(') {
-      groupLevel++
+      parenLevel++
     } else if (char === ')') {
-      groupLevel--
-    } else if (char === ',' && groupLevel === 0) {
+      parenLevel--
+    } else if (char === '{') {
+      braceLevel++
+    } else if (char === '}') {
+      braceLevel--
+    } else if (char === ',' && parenLevel === 0 && braceLevel === 0) {
       args.push(argSource.substring(argStart, i).trim())
       argStart = i + 1
     }
@@ -557,17 +692,27 @@ export class Trace {
       // scan and parse
       let kind = TokenKind.null
       const ops = findOperator ? operators : operands
-      match = null
+      let matched: string | null = null
 
       for (let i = 0; i < ops.length; i++) {
         const o = ops[i]
-        match = o.regex.exec(stringLeft)
-        if (match !== null) {
-          kind = o.kind
-          break
+        if (o.regex !== undefined) {
+          const m = o.regex.exec(stringLeft)
+          if (m !== null) {
+            matched = m[0]
+            kind = o.kind
+            break
+          }
+        } else if (o.scan !== undefined) {
+          const m = o.scan(stringLeft)
+          if (m !== null) {
+            matched = m
+            kind = o.kind
+            break
+          }
         }
       }
-      if (match === null) {
+      if (matched === null) {
         const offset = preprocessed.length - stringLeft.length
         const contextStart = Math.max(0, offset - 20)
         const snippet = preprocessed.substring(contextStart, offset + 30)
@@ -577,14 +722,21 @@ export class Trace {
         )
       }
 
+      // Code block sugar: `{ body }` becomes anonymous function `() => { body }`.
+      // The scan rule already mapped it to TokenKind.aFunction; rewrite the
+      // matched string so downstream handling sees a complete function token.
+      if (kind === TokenKind.aFunction && matched[0] === '{') {
+        matched = '()=>' + matched
+      }
+
       // remove consumed text from string
-      stringLeft = stringLeft.substring(match[0].length)
+      stringLeft = stringLeft.substring(matched.length)
 
       if (kind === TokenKind.beep) {
         tokens.push({
           kind: TokenKind.beep,
           value: NaN,
-          string: match[0].substring(1, match[0].length - 1)
+          string: matched.substring(1, matched.length - 1)
         })
 
         // see if parsing is done
@@ -601,7 +753,7 @@ export class Trace {
       }
 
       if (params.length > 0 && kind === TokenKind.variable) {
-        const iof = params.indexOf(match[0])
+        const iof = params.indexOf(matched)
         if (iof !== -1) {
           // variable references a parameter
           tokens.push({
@@ -610,7 +762,7 @@ export class Trace {
             string: '&'
           })
           kind = TokenKind.literal
-          match[0] = (iof + 1).toFixed(0)
+          matched = (iof + 1).toFixed(0)
         }
       }
 
@@ -666,25 +818,25 @@ export class Trace {
       // push the token
       const token: TraceToken = {
         kind,
-        value: parseFloat(match[0]),
-        string: match[0]
+        value: parseFloat(matched),
+        string: matched
       }
       if (kind === TokenKind.literalArray) {
-        token.parsedValues = match[0].split('|').map(parseFloat)
+        token.parsedValues = matched.split('|').map(parseFloat)
       } else if (kind === TokenKind.functionCall || kind === TokenKind.tailCall) {
-        const callArgStrings = parseCallArgs(match[0])
+        const callArgStrings = parseCallArgs(matched)
         if (callArgStrings.length > 0) {
           token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg))
         }
       } else if (kind === TokenKind.arrayRead) {
-        const bracketPos = match[0].indexOf('[')
-        const indexSrc = match[0].substring(bracketPos + 1, match[0].length - 1)
+        const bracketPos = matched.indexOf('[')
+        const indexSrc = matched.substring(bracketPos + 1, matched.length - 1)
         if (indexSrc.length > 0) {
           token.parsedArgs = [Trace.parse(indexSrc)]
         }
-        token.string = match[0].substring(0, bracketPos)
+        token.string = matched.substring(0, bracketPos)
       } else if (kind === TokenKind.arrayCreate) {
-        const sizeSrc = match[0].substring(1, match[0].length - 1)
+        const sizeSrc = matched.substring(1, matched.length - 1)
         if (sizeSrc.length > 0) {
           token.parsedArgs = [Trace.parse(sizeSrc)]
         }

@@ -466,3 +466,33 @@ describe('random operators', () => {
     expect(result.value).toBe(2.5)
   })
 })
+
+describe('nested braces', () => {
+  it('parses nested {} inside a function body', () => {
+    // outer fn with an inner anonymous function block
+    expect(runTrace('outer()=>{x=0; ()=>{x=5}; x}; outer()')).toBe(5)
+  })
+
+  it('parses nested {} two levels deep', () => {
+    expect(runTrace('a()=>{b()=>{c=7}; b(); c}; a()')).toBe(7)
+  })
+
+  it('allows {} inside function call arguments', () => {
+    // anonymous function as an argument to a named call
+    expect(runTrace('apply(fn,x)=>{fn(x)}; double(x)=>{x*2}; apply(double, 6)')).toBe(12)
+  })
+})
+
+describe('code blocks', () => {
+  it('treats { body } as an anonymous function (auto-runs)', () => {
+    expect(runTrace('{1 + 2}')).toBe(3)
+  })
+
+  it('code block with statements behaves like an anonymous function', () => {
+    expect(runTrace('x = 0; {x = 5; x + 1}')).toBe(6)
+  })
+
+  it('code block visible side effects on outer scope', () => {
+    expect(runTrace('x = 1; {x = 9}; x')).toBe(9)
+  })
+})
