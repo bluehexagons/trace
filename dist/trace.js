@@ -1,4 +1,6 @@
-// performance is available globally in Node.js (>=16) and browsers
+// Use the high-resolution clock where available, while keeping the core
+// usable in older runtimes that do not expose `performance` globally.
+const now = () => globalThis.performance?.now() ?? Date.now();
 // TODO: consider |> function calls
 // Returns the index of the matching close delimiter for s[startIdx], allowing
 // nested () and {} interleaved. Returns -1 if unbalanced.
@@ -452,9 +454,15 @@ const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
 // so the strict unknown-variable check can be deferred to the write site which
 // provides a more specific error message.
 const writeTargets = new Set([
-    37 /* TokenKind.set */, 38 /* TokenKind.addSet */, 39 /* TokenKind.subSet */, 40 /* TokenKind.mulSet */,
-    41 /* TokenKind.divSet */, 42 /* TokenKind.modSet */, 43 /* TokenKind.powSet */,
-    44 /* TokenKind.increment */, 45 /* TokenKind.decrement */,
+    37 /* TokenKind.set */,
+    38 /* TokenKind.addSet */,
+    39 /* TokenKind.subSet */,
+    40 /* TokenKind.mulSet */,
+    41 /* TokenKind.divSet */,
+    42 /* TokenKind.modSet */,
+    43 /* TokenKind.powSet */,
+    44 /* TokenKind.increment */,
+    45 /* TokenKind.decrement */,
 ]);
 const createSeededRandom = (seed) => {
     let state = seed >>> 0;
@@ -1077,7 +1085,7 @@ export class Trace {
             }
         }
     }
-    run(args = [], variables = null, vars = null, functions = null, arrays = null, rand = Math.random, executionLimit = 1000, executionStart = performance.now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false, stdlibCategories = defaultStdlibCategories) {
+    run(args = [], variables = null, vars = null, functions = null, arrays = null, rand = Math.random, executionLimit = 1000, executionStart = now(), maxSteps = Number.POSITIVE_INFINITY, context = { startedAt: executionStart, steps: 0, status: 'completed' }, strict = false, stdlibCategories = defaultStdlibCategories) {
         const frames = [];
         let fn = '';
         let script = '';
@@ -1125,10 +1133,10 @@ export class Trace {
                 context.steps++;
                 if (context.steps >= nextTimeoutCheck) {
                     nextTimeoutCheck = context.steps + 1024;
-                    if (performance.now() - context.startedAt > executionLimit) {
+                    if (now() - context.startedAt > executionLimit) {
                         this.errorLogger('Trace timed out');
                         context.status = 'timeout';
-                        this.lastRunTime = performance.now() - context.startedAt;
+                        this.lastRunTime = now() - context.startedAt;
                         this.lastRunSteps = context.steps;
                         this.lastRunStatus = context.status;
                         return 0;
@@ -1137,7 +1145,7 @@ export class Trace {
                 if (context.steps > maxSteps) {
                     this.errorLogger('Trace exceeded step limit');
                     context.status = 'step-limit';
-                    this.lastRunTime = performance.now() - context.startedAt;
+                    this.lastRunTime = now() - context.startedAt;
                     this.lastRunSteps = context.steps;
                     this.lastRunStatus = context.status;
                     return 0;
@@ -1286,7 +1294,7 @@ export class Trace {
                                 };
                                 val = stdEntry.fn(t.parsedArgs ?? [], stdCtx);
                                 if (context.status !== 'completed') {
-                                    this.lastRunTime = performance.now() - context.startedAt;
+                                    this.lastRunTime = now() - context.startedAt;
                                     this.lastRunSteps = context.steps;
                                     this.lastRunStatus = context.status;
                                     return 0;
@@ -1315,7 +1323,7 @@ export class Trace {
                                     ? 0
                                     : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories);
                                 if (context.status !== 'completed') {
-                                    this.lastRunTime = performance.now() - context.startedAt;
+                                    this.lastRunTime = now() - context.startedAt;
                                     this.lastRunSteps = context.steps;
                                     this.lastRunStatus = context.status;
                                     return 0;
@@ -1380,7 +1388,7 @@ export class Trace {
                         const indexTrace = t.parsedArgs?.[0];
                         const idxRaw = indexTrace === undefined ? 0 : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
-                            this.lastRunTime = performance.now() - context.startedAt;
+                            this.lastRunTime = now() - context.startedAt;
                             this.lastRunSteps = context.steps;
                             this.lastRunStatus = context.status;
                             return 0;
@@ -1408,7 +1416,7 @@ export class Trace {
                         const sizeTrace = t.parsedArgs?.[0];
                         const sizeRaw = sizeTrace === undefined ? 0 : (sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
-                            this.lastRunTime = performance.now() - context.startedAt;
+                            this.lastRunTime = now() - context.startedAt;
                             this.lastRunSteps = context.steps;
                             this.lastRunStatus = context.status;
                             return 0;
@@ -1569,7 +1577,7 @@ export class Trace {
             closeStatement(f, vars, functions, arrays, strict);
             value = f.value;
         }
-        this.lastRunTime = performance.now() - context.startedAt;
+        this.lastRunTime = now() - context.startedAt;
         this.lastRunSteps = context.steps;
         this.lastRunStatus = context.status;
         return value;
@@ -1578,7 +1586,7 @@ export class Trace {
         const vars = options.persist ? null : new Map();
         const functions = options.persist ? null : new Map();
         const arrays = options.persist ? null : new Map();
-        const startedAt = performance.now();
+        const startedAt = now();
         const context = {
             startedAt,
             steps: 0,
@@ -1594,7 +1602,7 @@ export class Trace {
         catch (e) {
             context.status = 'error';
             context.error = e instanceof Error ? e.message : String(e);
-            this.lastRunTime = performance.now() - context.startedAt;
+            this.lastRunTime = now() - context.startedAt;
             this.lastRunSteps = context.steps;
             this.lastRunStatus = context.status;
         }

@@ -8,7 +8,7 @@ Try Trace in a sandbox: https://bluehexagons.github.io/trace-sandbox/
 
 ## Platform Support
 
-The core library (`trace`) works in both Node.js (>=16) and modern browsers. The `trace/cli` entry point is Node.js-only.
+The core library (`trace`) works in both Node.js (>=20) and modern browsers. The `trace/cli` entry point is Node.js-only.
 
 ## Installation
 
@@ -383,7 +383,7 @@ i = 0; bump()=>{ i++ }; while(i < 3, bump); i // 3
 | `foreach(arr, fn)` | calls `fn(elem, index)` for each element |
 | `mapmut(arr, fn)` | replaces every element with `fn(elem, index)` in place |
 | `map(arr, fn)` | returns a new array with `fn(elem, index)` per element |
-| `reduce(arr, fn, init?)` | folds with `fn(acc, elem, index)`; `init` defaults to `arr[1]` |
+| `reduce(arr, fn, init?)` | folds with `fn(acc, elem, index)`; `init` defaults to `0` |
 | `sort(arr, cmp?)` | sorts in place; `cmp(a, b)` defaults to ascending |
 | `sum(arr)` | returns the total of all elements |
 | `find(arr, pred)` | returns the 1-based index of the first element where `pred(elem, index)` is non-zero (`0` if none) |

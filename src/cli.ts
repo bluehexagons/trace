@@ -1,5 +1,5 @@
-import { fileURLToPath } from 'url'
-import { argv } from 'process'
+import { argv } from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { runTrace } from './trace.js'
 
 if (fileURLToPath(import.meta.url) === argv[1]) {

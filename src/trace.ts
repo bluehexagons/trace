@@ -1,4 +1,6 @@
-// performance is available globally in Node.js (>=16) and browsers
+// Use the high-resolution clock where available, while keeping the core
+// usable in older runtimes that do not expose `performance` globally.
+const now = (): number => globalThis.performance?.now() ?? Date.now()
 
 // TODO: consider |> function calls
 
@@ -1150,7 +1152,7 @@ export class Trace {
     arrays: (Map<string, Float64Array> | null) = null,
     rand: () => number = Math.random,
     executionLimit = 1000,
-    executionStart: number = performance.now(),
+    executionStart: number = now(),
     maxSteps = Number.POSITIVE_INFINITY,
     context: TraceRunContext = { startedAt: executionStart, steps: 0, status: 'completed' },
     strict = false,
@@ -1215,10 +1217,10 @@ export class Trace {
         context.steps++
         if (context.steps >= nextTimeoutCheck) {
           nextTimeoutCheck = context.steps + 1024
-          if (performance.now() - context.startedAt > executionLimit) {
+          if (now() - context.startedAt > executionLimit) {
             this.errorLogger('Trace timed out')
             context.status = 'timeout'
-            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunTime = now() - context.startedAt
             this.lastRunSteps = context.steps
             this.lastRunStatus = context.status
             return 0
@@ -1227,7 +1229,7 @@ export class Trace {
         if (context.steps > maxSteps) {
           this.errorLogger('Trace exceeded step limit')
           context.status = 'step-limit'
-          this.lastRunTime = performance.now() - context.startedAt
+          this.lastRunTime = now() - context.startedAt
           this.lastRunSteps = context.steps
           this.lastRunStatus = context.status
           return 0
@@ -1387,7 +1389,7 @@ export class Trace {
               }
               val = stdEntry.fn(t.parsedArgs ?? [], stdCtx)
               if (context.status !== 'completed') {
-                this.lastRunTime = performance.now() - context.startedAt
+                this.lastRunTime = now() - context.startedAt
                 this.lastRunSteps = context.steps
                 this.lastRunStatus = context.status
                 return 0
@@ -1420,7 +1422,7 @@ export class Trace {
                 ? 0
                 : argTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories)
               if (context.status !== 'completed') {
-                this.lastRunTime = performance.now() - context.startedAt
+                this.lastRunTime = now() - context.startedAt
                 this.lastRunSteps = context.steps
                 this.lastRunStatus = context.status
                 return 0
@@ -1490,7 +1492,7 @@ export class Trace {
             indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0
           )
           if (context.status !== 'completed') {
-            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunTime = now() - context.startedAt
             this.lastRunSteps = context.steps
             this.lastRunStatus = context.status
             return 0
@@ -1519,7 +1521,7 @@ export class Trace {
             sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0
           )
           if (context.status !== 'completed') {
-            this.lastRunTime = performance.now() - context.startedAt
+            this.lastRunTime = now() - context.startedAt
             this.lastRunSteps = context.steps
             this.lastRunStatus = context.status
             return 0
@@ -1706,7 +1708,7 @@ export class Trace {
       value = f.value
     }
 
-    this.lastRunTime = performance.now() - context.startedAt
+    this.lastRunTime = now() - context.startedAt
     this.lastRunSteps = context.steps
     this.lastRunStatus = context.status
     return value
@@ -1716,7 +1718,7 @@ export class Trace {
     const vars = options.persist ? null : new Map<string, number>()
     const functions = options.persist ? null : new Map<string, Trace>()
     const arrays = options.persist ? null : new Map<string, Float64Array>()
-    const startedAt = performance.now()
+    const startedAt = now()
     const context: TraceRunContext = {
       startedAt,
       steps: 0,
@@ -1748,7 +1750,7 @@ export class Trace {
     } catch (e) {
       context.status = 'error'
       context.error = e instanceof Error ? e.message : String(e)
-      this.lastRunTime = performance.now() - context.startedAt
+      this.lastRunTime = now() - context.startedAt
       this.lastRunSteps = context.steps
       this.lastRunStatus = context.status
     }
