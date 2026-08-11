@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runTrace, runTraceWithOptions, Trace } from '../index.js'
+import { runTrace, runTraceWithOptions, Trace, TraceMemory } from '../index.js'
 
 describe('parse errors', () => {
   it('throws on invalid syntax', () => {
@@ -192,6 +192,22 @@ describe('execution limits', () => {
     const script = Trace.parse('x++; x')
     expect(script.runWithOptions({ persist: true }).value).toBe(1)
     expect(script.runWithOptions({ persist: true }).value).toBe(2)
+  })
+
+  it('can share an explicit memory environment across parsed scripts', () => {
+    const memory = new TraceMemory()
+    const initialize = Trace.parse('frame = 0; output = [2]; output[1] = 3; output[2] = 5')
+    const tick = Trace.parse('frame++; output[1] += output[2]; frame')
+
+    initialize.runWithOptions({ memory })
+    expect(tick.runWithOptions({ memory }).value).toBe(1)
+    expect(tick.runWithOptions({ memory }).value).toBe(2)
+    expect(memory.getVariable('frame')).toBe(2)
+    expect(Array.from(memory.getArray('output') ?? [])).toEqual([2, 13, 5])
+
+    memory.clear()
+    expect(memory.getVariable('frame')).toBeUndefined()
+    expect(memory.getArray('output')).toBeUndefined()
   })
 
   it('can report unknown variables in strict mode', () => {

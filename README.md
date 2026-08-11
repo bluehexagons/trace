@@ -87,6 +87,32 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
 console.log(result.value, result.steps, result.runtimeMs, result.status);
 ```
 
+### Persistent memory
+
+Use `TraceMemory` when code runs incrementally, such as once per animation or
+game tick. The same environment can be shared by repeated runs or by separate
+parsed setup and tick programs:
+
+```javascript
+import { Trace, TraceMemory } from 'trace';
+
+const memory = new TraceMemory();
+const setup = Trace.parse('frame = 0; output = [2]');
+const tick = Trace.parse('frame++; output[1] = frame; output[2] = frame ** 2; frame');
+
+setup.runWithOptions({ memory });
+tick.runWithOptions({ memory });
+tick.runWithOptions({ memory });
+
+console.log(memory.getVariable('frame')); // 2
+console.log(memory.getArray('output')?.[2]); // 4
+```
+
+Trace arrays retain their language layout in memory: element `0` is the array
+size and data begins at element `1`. `memory.clear()` resets the environment.
+The older `{ persist: true }` option remains available when state only needs to
+belong to one parsed `Trace` instance.
+
 ## Building
 
 ```bash

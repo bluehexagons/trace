@@ -449,6 +449,29 @@ const resolveStdlibCategories = (opt) => {
     return out;
 };
 const defaultStdlibCategories = new Set(allStdlibCategories);
+/**
+ * A reusable Trace execution environment.
+ *
+ * Pass the same memory object to multiple parsed programs (or repeated runs of
+ * one program) to share variables, functions, and fixed-size arrays. Arrays
+ * expose Trace's native 1-based layout: index 0 contains the declared size.
+ */
+export class TraceMemory {
+    variables = new Map();
+    functions = new Map();
+    arrays = new Map();
+    getVariable(name) {
+        return this.variables.get(name);
+    }
+    getArray(name) {
+        return this.arrays.get(name);
+    }
+    clear() {
+        this.variables.clear();
+        this.functions.clear();
+        this.arrays.clear();
+    }
+}
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
 // Tokens that make the preceding variable a write target rather than a read,
 // so the strict unknown-variable check can be deferred to the write site which
@@ -1583,9 +1606,9 @@ export class Trace {
         return value;
     }
     runWithOptions(options = {}) {
-        const vars = options.persist ? null : new Map();
-        const functions = options.persist ? null : new Map();
-        const arrays = options.persist ? null : new Map();
+        const vars = options.memory?.variables ?? (options.persist ? null : new Map());
+        const functions = options.memory?.functions ?? (options.persist ? null : new Map());
+        const arrays = options.memory?.arrays ?? (options.persist ? null : new Map());
         const startedAt = now();
         const context = {
             startedAt,

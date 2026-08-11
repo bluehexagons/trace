@@ -1,2 +1,2 @@
-export { Trace, runTrace, runTraceWithOptions } from './trace.js';
+export { Trace, TraceMemory, runTrace, runTraceWithOptions } from './trace.js';
 //# sourceMappingURL=index.js.map

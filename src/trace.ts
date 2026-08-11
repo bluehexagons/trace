@@ -446,6 +446,7 @@ export type TraceStdlibOptions = {
 export type TraceRunOptions = {
   args?: number[]
   variables?: {[s: string]: number}
+  memory?: TraceMemory
   rand?: () => number
   randomSeed?: number
   timeoutMs?: number
@@ -477,6 +478,33 @@ export type TraceRunResult = {
   runtimeMs: number
   status: TraceRunStatus
   error?: string
+}
+
+/**
+ * A reusable Trace execution environment.
+ *
+ * Pass the same memory object to multiple parsed programs (or repeated runs of
+ * one program) to share variables, functions, and fixed-size arrays. Arrays
+ * expose Trace's native 1-based layout: index 0 contains the declared size.
+ */
+export class TraceMemory {
+  readonly variables = new Map<string, number>()
+  readonly functions = new Map<string, Trace>()
+  readonly arrays = new Map<string, Float64Array>()
+
+  getVariable(name: string): number | undefined {
+    return this.variables.get(name)
+  }
+
+  getArray(name: string): Float64Array | undefined {
+    return this.arrays.get(name)
+  }
+
+  clear(): void {
+    this.variables.clear()
+    this.functions.clear()
+    this.arrays.clear()
+  }
 }
 
 type TraceRunContext = {
@@ -1715,9 +1743,9 @@ export class Trace {
   }
 
   runWithOptions(options: TraceRunOptions = {}): TraceRunResult {
-    const vars = options.persist ? null : new Map<string, number>()
-    const functions = options.persist ? null : new Map<string, Trace>()
-    const arrays = options.persist ? null : new Map<string, Float64Array>()
+    const vars = options.memory?.variables ?? (options.persist ? null : new Map<string, number>())
+    const functions = options.memory?.functions ?? (options.persist ? null : new Map<string, Trace>())
+    const arrays = options.memory?.arrays ?? (options.persist ? null : new Map<string, Float64Array>())
     const startedAt = now()
     const context: TraceRunContext = {
       startedAt,

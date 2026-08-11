@@ -72,6 +72,7 @@ export type TraceRunOptions = {
     variables?: {
         [s: string]: number;
     };
+    memory?: TraceMemory;
     rand?: () => number;
     randomSeed?: number;
     timeoutMs?: number;
@@ -88,6 +89,21 @@ export type TraceRunResult = {
     status: TraceRunStatus;
     error?: string;
 };
+/**
+ * A reusable Trace execution environment.
+ *
+ * Pass the same memory object to multiple parsed programs (or repeated runs of
+ * one program) to share variables, functions, and fixed-size arrays. Arrays
+ * expose Trace's native 1-based layout: index 0 contains the declared size.
+ */
+export declare class TraceMemory {
+    readonly variables: Map<string, number>;
+    readonly functions: Map<string, Trace>;
+    readonly arrays: Map<string, Float64Array<ArrayBufferLike>>;
+    getVariable(name: string): number | undefined;
+    getArray(name: string): Float64Array | undefined;
+    clear(): void;
+}
 type TraceRunContext = {
     startedAt: number;
     steps: number;
