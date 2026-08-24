@@ -82,7 +82,7 @@ console.log(sum); // 10
 // Structured execution with explicit safety limits
 const result = runTraceWithOptions('q++; q < 10 ? () : q', {
   maxSteps: 1000,
-  timeoutMs: 100
+  timeoutMs: 100,
 });
 console.log(result.value, result.steps, result.runtimeMs, result.status);
 ```
@@ -118,13 +118,15 @@ belong to one parsed `Trace` instance.
 ```bash
 npm install
 npm run build
+npm run check
 ```
 
 ## Features:
-* near-total lack of syntax error checking
-* does math
-* more powerful than it had to be
-* not powerful enough to do anything particularly useful
+
+- near-total lack of syntax error checking
+- does math
+- more powerful than it had to be
+- not powerful enough to do anything particularly useful
 
 # literals, values
 
@@ -135,32 +137,39 @@ All literals are resolved to 64-bit floats.
 `15%` - a special type of literal that returns a percentage of the `value` variable
 
 # comments
-* `code #comment (until end of line)`
+
+- `code #comment (until end of line)`
 
 # variables
-* `var=5`
-* `var+=5`
-* `var++`
+
+- `var=5`
+- `var+=5`
+- `var++`
 
 supports `+=` `-=` `*=` `/=` `%%=` `++` `--` `**=` (to power of)
 
 `var++` and `var--` happen instantly (like `++var`) and can be used mid-statement
 
 # ranges
+
 `0~1` anywhere from 0 to 1
 
 ## plusminus
+
 `+-0.5` either 0.5 or -0.5
 
 # selections
+
 `1|2|3|4` will be 1, 2, 3, or 4
 
 # math
+
 `+` `-` `*` `/` `%` `**` (`a` to power of `b`) `~` (range `[a, b)`))
 
 order of operations and parenthesis work
 
 # conditionals
+
 0 = false
 non-0 = true
 1 is true result for boolean operators
@@ -168,8 +177,9 @@ non-0 = true
 supports `>` `<` `==` `!=` `>=` `<=` `&&` `||` `^` (exclusive or)
 
 ## ternary
-* `n ? true case`
-* `n ? true case : false case`
+
+- `n ? true case`
+- `n ? true case : false case`
 
 ternary terminates on statement end (semicolon or end of script)
 
@@ -203,6 +213,7 @@ arr[0]          # 5 (size)
 ```
 
 Loop example — sum 1 through 5 via an array:
+
 ```
 arr = [5]; i = 1;
 i <= 5 ? () => { arr[i] = i; i++ <= 5 ? () : 0 };
@@ -238,6 +249,7 @@ can also read args/params using pointers: `&1`, `&2`, `&variable`, etc
 Function names can be assigned to variables and passed as arguments.
 
 **Store a reference:**
+
 ```
 double(x) => { x * 2 }
 f = double
@@ -245,12 +257,14 @@ f(5)        # 10
 ```
 
 **Pass as an argument:**
+
 ```
 apply(fn, x) => { fn(x) }
 apply(double, 5)   # 10
 ```
 
 **Pass a stored reference:**
+
 ```
 f = double
 apply(f, 5)        # 10
@@ -259,6 +273,7 @@ apply(f, 5)        # 10
 A function name in a numeric expression evaluates to `0`. Only a plain assignment (`f = name`) captures the reference — mixing it with arithmetic stores `0` instead.
 
 Because function parameters are globals (see below), a function reference passed as a parameter is available to all functions called within that scope:
+
 ```
 mapStep(fn, n) => { res[i] = fn(i); i++ <= n ? mapStep(fn, n) : 0 }
 mapArr(fn, n)  => { res = [n]; i = 1; mapStep(fn, n) }
@@ -269,7 +284,7 @@ res[1] + res[2] + res[3]   # 2 + 4 + 6 = 12
 
 lambdas
 
-`name() => implicit return statement;` (note that it *must* end in a semicolon)
+`name() => implicit return statement;` (note that it _must_ end in a semicolon)
 
 call functions like `name()`
 
@@ -288,12 +303,14 @@ end statements with `;` or `,`
 last statement implicitly returns
 
 ## anonymous functions
+
 `() => { do; stuff; implicit return }`
-anonymous lambda (note that it *must* end in a semicolon)
+anonymous lambda (note that it _must_ end in a semicolon)
 `() => implicit return;`
 anonymous functions trigger instantly
 
 other examples:
+
 ```
 () => i++ < 10 ? >() : i
 > 10
@@ -310,18 +327,20 @@ other examples:
 ```
 
 ## anonymous function call
-* `()`
+
+- `()`
 
 calls currently-running function body again (including main script)
 
 # loops
-* `() => d++ < 3 ? () : d`
-* `() => d++ < 3 ? () : d`
-* `i++ < 10 ? >() : i`
 
+- `() => d++ < 3 ? () : d`
+- `() => d++ < 3 ? () : d`
+- `i++ < 10 ? >() : i`
 
 # TCO
-* `>tailcall()`
+
+- `>tailcall()`
 
 running a tail call obliterates the current stack frame
 can include tailcall `>` anywhere a function is being run
@@ -335,7 +354,7 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
   maxSteps: 1000,
   timeoutMs: 100,
   strict: true,
-  randomSeed: 123
+  randomSeed: 123,
 });
 ```
 
@@ -347,11 +366,11 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
 
 `strict: true` turns several silent behaviors into runtime errors:
 
-| Situation | Default | Strict |
-|---|---|---|
-| Read undeclared variable | resolves to `0` | `error` |
-| Call undeclared function | returns `0` | `error` |
-| `x++` / `x--` on undeclared variable | initializes at `0` | `error` |
+| Situation                                         | Default            | Strict  |
+| ------------------------------------------------- | ------------------ | ------- |
+| Read undeclared variable                          | resolves to `0`    | `error` |
+| Call undeclared function                          | returns `0`        | `error` |
+| `x++` / `x--` on undeclared variable              | initializes at `0` | `error` |
 | `x += n` (any compound op) on undeclared variable | initializes at `0` | `error` |
 
 Plain assignment (`x = 5`) is always allowed in strict mode — it declares the variable. All errors are surfaced in `result.error` and set `result.status` to `"error"`.
@@ -389,11 +408,11 @@ code block.
 
 ### loops
 
-| Function | Behavior |
-|---|---|
-| `while(cond, body)` | runs `body` while `cond` is non-zero |
+| Function                | Behavior                                               |
+| ----------------------- | ------------------------------------------------------ |
+| `while(cond, body)`     | runs `body` while `cond` is non-zero                   |
 | `for(init, cond, body)` | runs `init` once, then `body` while `cond` is non-zero |
-| `dowhile(body, cond)` | runs `body`, then continues while `cond` is non-zero |
+| `dowhile(body, cond)`   | runs `body`, then continues while `cond` is non-zero   |
 
 ```
 i = 0; while(i < 3, i++); i           // 3
@@ -404,15 +423,15 @@ i = 0; bump()=>{ i++ }; while(i < 3, bump); i // 3
 
 ### arrays
 
-| Function | Behavior |
-|---|---|
-| `foreach(arr, fn)` | calls `fn(elem, index)` for each element |
-| `mapmut(arr, fn)` | replaces every element with `fn(elem, index)` in place |
-| `map(arr, fn)` | returns a new array with `fn(elem, index)` per element |
-| `reduce(arr, fn, init?)` | folds with `fn(acc, elem, index)`; `init` defaults to `0` |
-| `sort(arr, cmp?)` | sorts in place; `cmp(a, b)` defaults to ascending |
-| `sum(arr)` | returns the total of all elements |
-| `find(arr, pred)` | returns the 1-based index of the first element where `pred(elem, index)` is non-zero (`0` if none) |
+| Function                 | Behavior                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `foreach(arr, fn)`       | calls `fn(elem, index)` for each element                                                           |
+| `mapmut(arr, fn)`        | replaces every element with `fn(elem, index)` in place                                             |
+| `map(arr, fn)`           | returns a new array with `fn(elem, index)` per element                                             |
+| `reduce(arr, fn, init?)` | folds with `fn(acc, elem, index)`; `init` defaults to `0`                                          |
+| `sort(arr, cmp?)`        | sorts in place; `cmp(a, b)` defaults to ascending                                                  |
+| `sum(arr)`               | returns the total of all elements                                                                  |
+| `find(arr, pred)`        | returns the 1-based index of the first element where `pred(elem, index)` is non-zero (`0` if none) |
 
 `map` allocates a new array and returns it via assignment, so the source array
 is left untouched:
@@ -438,13 +457,13 @@ Categories are configured via the `stdlib` option on `runTraceWithOptions`
 
 ```js
 // disable everything
-runTraceWithOptions(src, { stdlib: false })
+runTraceWithOptions(src, { stdlib: false });
 
 // disable only loops
-runTraceWithOptions(src, { stdlib: { loops: false } })
+runTraceWithOptions(src, { stdlib: { loops: false } });
 
 // explicit enable list
-runTraceWithOptions(src, { stdlib: { loops: true, arrays: false } })
+runTraceWithOptions(src, { stdlib: { loops: true, arrays: false } });
 ```
 
 Disabled stdlib calls behave like any other unknown function: they return `0`
@@ -464,12 +483,13 @@ The preprocessed source has whitespace and comments stripped, so the offset may 
 
 # echo
 
-* `@echo@` will `console.log` the text inside
-* `@=variable@` will `console.log` the name and value of the variable
-* `@&n@` will `console.log` the result of resolving the pointer
-* `@&variable@` will `console.log` the result of resolving the variable pointer
+- `@echo@` will `console.log` the text inside
+- `@=variable@` will `console.log` the name and value of the variable
+- `@&n@` will `console.log` the result of resolving the pointer
+- `@&variable@` will `console.log` the result of resolving the variable pointer
 
 # examples used in testing
+
 ```
 add()=>{q=q+1;q < 10 ? >add()};q=0;l=2* (2 * 3) + add()
 > 12
@@ -494,12 +514,14 @@ q++;q < 10 ? () : q
 ()=>{q++;q < 10 ? >()}; q
 > 10
 ```
+
 counts to 10
 
 ```
 runMath('[...] t = 0; i = 1; &0 > 0 ? ()=>{t += &i; i++ <= &0 ? () : t}', 1, 2, 3, 4)
 > 10
 ```
+
 totals all arguments
 
 formatted:
@@ -515,8 +537,9 @@ i = 1;
 ```
 
 # quirks
-* Anonymous lambdas are treated as an operand, despite ending in a semicolon. To terminate the statement, you need two semicolons.
-* `()=>15;3` -> parse error because of unexpected operand (3)
-* `()=>15;;3` -> OK, script returns 3
+
+- Anonymous lambdas are treated as an operand, despite ending in a semicolon. To terminate the statement, you need two semicolons.
+- `()=>15;3` -> parse error because of unexpected operand (3)
+- `()=>15;;3` -> OK, script returns 3
 
 There are a lot of syntax errors that go unchecked and probably break everything

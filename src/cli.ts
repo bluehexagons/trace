@@ -1,12 +1,12 @@
-import { argv } from 'node:process'
-import { fileURLToPath } from 'node:url'
-import { runTrace } from './trace.js'
+import { argv } from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { runTrace } from './trace.js';
 
 if (fileURLToPath(import.meta.url) === argv[1]) {
   try {
-    console.log(`1 + 10 = ${runTrace('1 + 10')}`)
+    console.log(`1 + 10 = ${runTrace('1 + 10')}`);
   } catch (e) {
-    console.error('Error:', e)
-    process.exit(1)
+    console.error('Error:', e);
+    process.exit(1);
   }
 }

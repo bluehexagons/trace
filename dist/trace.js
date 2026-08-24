@@ -206,190 +206,190 @@ var TokenKind;
 const operands = [
     {
         regex: /^@[^@]*@/,
-        kind: 50 /* TokenKind.beep */
+        kind: 50 /* TokenKind.beep */,
     },
     {
         regex: /^-/,
-        kind: 6 /* TokenKind.negate */
+        kind: 6 /* TokenKind.negate */,
     },
     {
         regex: /^\+-/,
-        kind: 8 /* TokenKind.plusminus */
+        kind: 8 /* TokenKind.plusminus */,
     },
     {
         regex: /^!/,
-        kind: 7 /* TokenKind.not */
+        kind: 7 /* TokenKind.not */,
     },
     {
         scan: scanAFunction,
-        kind: 13 /* TokenKind.aFunction */
+        kind: 13 /* TokenKind.aFunction */,
     },
     {
         scan: scanALambda,
-        kind: 15 /* TokenKind.aLambda */
+        kind: 15 /* TokenKind.aLambda */,
     },
     {
         scan: scanFunction,
-        kind: 14 /* TokenKind.function */
+        kind: 14 /* TokenKind.function */,
     },
     {
         scan: scanLambda,
-        kind: 16 /* TokenKind.lambda */
+        kind: 16 /* TokenKind.lambda */,
     },
     {
         scan: scanFunctionCall,
-        kind: 11 /* TokenKind.functionCall */
+        kind: 11 /* TokenKind.functionCall */,
     },
     {
         scan: scanTailCall,
-        kind: 12 /* TokenKind.tailCall */
+        kind: 12 /* TokenKind.tailCall */,
     },
     {
         scan: scanArrayRead,
-        kind: 47 /* TokenKind.arrayRead */
+        kind: 47 /* TokenKind.arrayRead */,
     },
     {
         regex: /^[a-zA-Z_][\w.]*/,
-        kind: 1 /* TokenKind.variable */
+        kind: 1 /* TokenKind.variable */,
     },
     {
         regex: /^-?[0-9.]+(\|-?[0-9.]+)+/,
-        kind: 5 /* TokenKind.literalArray */
+        kind: 5 /* TokenKind.literalArray */,
     },
     {
         regex: /^(-?[0-9.]+%(?!%)|-?[0-9.]+%(?=%%))/,
-        kind: 4 /* TokenKind.percent */
+        kind: 4 /* TokenKind.percent */,
     },
     {
         regex: /^-?[0-9.]+/,
-        kind: 3 /* TokenKind.literal */
+        kind: 3 /* TokenKind.literal */,
     },
     {
         regex: /^;/,
-        kind: 48 /* TokenKind.statement */
+        kind: 48 /* TokenKind.statement */,
     },
     {
         regex: /^\(/,
-        kind: 9 /* TokenKind.startGroup */
+        kind: 9 /* TokenKind.startGroup */,
     },
     {
         // Code block as operand: `{ body }` is sugar for `() => { body }`
         scan: scanCodeBlock,
-        kind: 13 /* TokenKind.aFunction */
+        kind: 13 /* TokenKind.aFunction */,
     },
     {
         scan: scanBracketed,
-        kind: 46 /* TokenKind.arrayCreate */
+        kind: 46 /* TokenKind.arrayCreate */,
     },
     {
         regex: /^&/,
-        kind: 2 /* TokenKind.pointer */
-    }
+        kind: 2 /* TokenKind.pointer */,
+    },
 ];
 const operators = [
     {
         regex: /^@[^@]*@/,
-        kind: 50 /* TokenKind.beep */
+        kind: 50 /* TokenKind.beep */,
     },
     {
         regex: /^\+=/,
-        kind: 38 /* TokenKind.addSet */
+        kind: 38 /* TokenKind.addSet */,
     },
     {
         regex: /^-=/,
-        kind: 39 /* TokenKind.subSet */
+        kind: 39 /* TokenKind.subSet */,
     },
     {
         regex: /^\*\*=/,
-        kind: 43 /* TokenKind.powSet */
+        kind: 43 /* TokenKind.powSet */,
     },
     {
         regex: /^\*=/,
-        kind: 40 /* TokenKind.mulSet */
+        kind: 40 /* TokenKind.mulSet */,
     },
     {
         regex: /^\/=/,
-        kind: 41 /* TokenKind.divSet */
+        kind: 41 /* TokenKind.divSet */,
     },
     {
         regex: /^%%=/,
-        kind: 42 /* TokenKind.modSet */
+        kind: 42 /* TokenKind.modSet */,
     },
     {
         regex: /^\+\+/,
-        kind: 44 /* TokenKind.increment */
+        kind: 44 /* TokenKind.increment */,
     },
     {
         regex: /^--/,
-        kind: 45 /* TokenKind.decrement */
+        kind: 45 /* TokenKind.decrement */,
     },
     {
         regex: /^\+/,
-        kind: 17 /* TokenKind.add */
+        kind: 17 /* TokenKind.add */,
     },
     {
         regex: /^-/,
-        kind: 18 /* TokenKind.sub */
+        kind: 18 /* TokenKind.sub */,
     },
     {
         regex: /^\*\*/,
-        kind: 22 /* TokenKind.pow */
+        kind: 22 /* TokenKind.pow */,
     },
     {
         regex: /^\*/,
-        kind: 19 /* TokenKind.mul */
+        kind: 19 /* TokenKind.mul */,
     },
     {
         regex: /^\//,
-        kind: 20 /* TokenKind.div */
+        kind: 20 /* TokenKind.div */,
     },
     {
         regex: /^%%/,
-        kind: 21 /* TokenKind.mod */
+        kind: 21 /* TokenKind.mod */,
     },
     {
         regex: /^~/,
-        kind: 23 /* TokenKind.range */
+        kind: 23 /* TokenKind.range */,
     },
     {
         regex: /^>=/,
-        kind: 26 /* TokenKind.gteq */
+        kind: 26 /* TokenKind.gteq */,
     },
     {
         regex: /^<=/,
-        kind: 27 /* TokenKind.lteq */
+        kind: 27 /* TokenKind.lteq */,
     },
     {
         regex: /^!=/,
-        kind: 29 /* TokenKind.neq */
+        kind: 29 /* TokenKind.neq */,
     },
     {
         regex: /^==/,
-        kind: 28 /* TokenKind.eq */
+        kind: 28 /* TokenKind.eq */,
     },
     {
         regex: /^</,
-        kind: 25 /* TokenKind.lt */
+        kind: 25 /* TokenKind.lt */,
     },
     {
         regex: /^>/,
-        kind: 24 /* TokenKind.gt */
+        kind: 24 /* TokenKind.gt */,
     },
     {
         regex: /^\|\|/,
-        kind: 30 /* TokenKind.or */
+        kind: 30 /* TokenKind.or */,
     },
     {
         regex: /^&&/,
-        kind: 31 /* TokenKind.and */
+        kind: 31 /* TokenKind.and */,
     },
     {
         regex: /^\^/,
-        kind: 32 /* TokenKind.xor */
+        kind: 32 /* TokenKind.xor */,
     },
     {
         regex: /^=/,
-        kind: 37 /* TokenKind.set */
+        kind: 37 /* TokenKind.set */,
     },
     {
         regex: /^\?/,
@@ -401,23 +401,23 @@ const operators = [
     },
     {
         regex: /^{/,
-        kind: 35 /* TokenKind.blockStart */
+        kind: 35 /* TokenKind.blockStart */,
     },
     {
         regex: /^}/,
-        kind: 36 /* TokenKind.blockEnd */
+        kind: 36 /* TokenKind.blockEnd */,
     },
     {
         regex: /^;/,
-        kind: 48 /* TokenKind.statement */
+        kind: 48 /* TokenKind.statement */,
     },
     {
         regex: /^,/,
-        kind: 49 /* TokenKind.separator */
+        kind: 49 /* TokenKind.separator */,
     },
     {
         regex: /^\)/,
-        kind: 10 /* TokenKind.endGroup */
+        kind: 10 /* TokenKind.endGroup */,
     },
 ];
 const opLevels = new Map();
@@ -433,7 +433,14 @@ for (const t of [19 /* TokenKind.mul */, 20 /* TokenKind.div */, 21 /* TokenKind
 for (const t of [17 /* TokenKind.add */, 18 /* TokenKind.sub */]) {
     opLevels.set(t, 2);
 }
-for (const t of [24 /* TokenKind.gt */, 25 /* TokenKind.lt */, 26 /* TokenKind.gteq */, 27 /* TokenKind.lteq */, 28 /* TokenKind.eq */, 29 /* TokenKind.neq */]) {
+for (const t of [
+    24 /* TokenKind.gt */,
+    25 /* TokenKind.lt */,
+    26 /* TokenKind.gteq */,
+    27 /* TokenKind.lteq */,
+    28 /* TokenKind.eq */,
+    29 /* TokenKind.neq */,
+]) {
     opLevels.set(t, 1);
 }
 const allStdlibCategories = ['loops', 'arrays'];
@@ -441,7 +448,7 @@ const resolveStdlibCategories = (opt) => {
     if (opt === false)
         return new Set();
     const out = new Set();
-    const o = (opt === undefined || opt === true) ? {} : opt;
+    const o = opt === undefined || opt === true ? {} : opt;
     for (const c of allStdlibCategories) {
         if (o[c] !== false)
             out.add(c);
@@ -568,14 +575,22 @@ class StackFrame {
 }
 const applySetOp = (op, cur, val) => {
     switch (op) {
-        case 37 /* TokenKind.set */: return val;
-        case 38 /* TokenKind.addSet */: return cur + val;
-        case 39 /* TokenKind.subSet */: return cur - val;
-        case 40 /* TokenKind.mulSet */: return cur * val;
-        case 41 /* TokenKind.divSet */: return val === 0 ? 0 : cur / val;
-        case 42 /* TokenKind.modSet */: return (val === 0 || !Number.isFinite(val)) ? 0 : cur % val;
-        case 43 /* TokenKind.powSet */: return cur ** val;
-        default: return cur;
+        case 37 /* TokenKind.set */:
+            return val;
+        case 38 /* TokenKind.addSet */:
+            return cur + val;
+        case 39 /* TokenKind.subSet */:
+            return cur - val;
+        case 40 /* TokenKind.mulSet */:
+            return cur * val;
+        case 41 /* TokenKind.divSet */:
+            return val === 0 ? 0 : cur / val;
+        case 42 /* TokenKind.modSet */:
+            return val === 0 || !Number.isFinite(val) ? 0 : cur % val;
+        case 43 /* TokenKind.powSet */:
+            return cur ** val;
+        default:
+            return cur;
     }
 };
 const closeStatement = (f, vars, functions, arrays, strict = false) => {
@@ -666,8 +681,10 @@ const resolveCallable = (arg, ctx) => {
             return { trace: fnRef, params: fnRef.callParams };
         return null;
     }
-    if (t.kind === 13 /* TokenKind.aFunction */ || t.kind === 14 /* TokenKind.function */ ||
-        t.kind === 15 /* TokenKind.aLambda */ || t.kind === 16 /* TokenKind.lambda */) {
+    if (t.kind === 13 /* TokenKind.aFunction */ ||
+        t.kind === 14 /* TokenKind.function */ ||
+        t.kind === 15 /* TokenKind.aLambda */ ||
+        t.kind === 16 /* TokenKind.lambda */) {
         if (t.callable === undefined) {
             const isFn = t.kind === 14 /* TokenKind.function */ || t.kind === 13 /* TokenKind.aFunction */;
             const body = isFn
@@ -853,9 +870,7 @@ const stdlibSort = (args, ctx) => {
     if (arr === null)
         return 0;
     const size = arr[0] | 0;
-    const slice = new Array(size);
-    for (let i = 0; i < size; i++)
-        slice[i] = arr[i + 1];
+    const slice = Array.from({ length: size }, (_, index) => arr[index + 1]);
     const cb = args.length >= 2 ? resolveCallable(args[1], ctx) : null;
     if (cb !== null) {
         slice.sort((a, b) => callCallable(cb, [a, b], ctx));
@@ -994,7 +1009,7 @@ export class Trace {
                 tokens.push({
                     kind: 50 /* TokenKind.beep */,
                     value: NaN,
-                    string: matched.substring(1, matched.length - 1)
+                    string: matched.substring(1, matched.length - 1),
                 });
                 // see if parsing is done
                 if (stringLeft.length === 0) {
@@ -1014,19 +1029,28 @@ export class Trace {
                     tokens.push({
                         kind: 2 /* TokenKind.pointer */,
                         value: NaN,
-                        string: '&'
+                        string: '&',
                     });
                     kind = 3 /* TokenKind.literal */;
                     matched = (iof + 1).toFixed(0);
                 }
             }
             // parenthesis insertion
-            if (findOperator && kind !== 10 /* TokenKind.endGroup */ && kind !== 48 /* TokenKind.statement */ && kind !== 49 /* TokenKind.separator */ && kind !== 44 /* TokenKind.increment */ && kind !== 45 /* TokenKind.decrement */) {
+            if (findOperator &&
+                kind !== 10 /* TokenKind.endGroup */ &&
+                kind !== 48 /* TokenKind.statement */ &&
+                kind !== 49 /* TokenKind.separator */ &&
+                kind !== 44 /* TokenKind.increment */ &&
+                kind !== 45 /* TokenKind.decrement */) {
                 // automatically insert parenthesis for order of operations
                 const opLevel = opLevels.has(kind) ? opLevels.get(kind) : 0;
                 while (groupLevel < opLevel) {
                     groupLevel++;
-                    tokens.splice(loi[loi.length - 1], 0, { kind: 9 /* TokenKind.startGroup */, value: NaN, string: '(' });
+                    tokens.splice(loi[loi.length - 1], 0, {
+                        kind: 9 /* TokenKind.startGroup */,
+                        value: NaN,
+                        string: '(',
+                    });
                 }
                 while (groupLevel > opLevel) {
                     groupLevel--;
@@ -1056,7 +1080,9 @@ export class Trace {
                 loi[0] = tokens.length + 1;
             }
             // determine what to find next
-            if (kind === 10 /* TokenKind.endGroup */ || kind === 44 /* TokenKind.increment */ || kind === 45 /* TokenKind.decrement */) {
+            if (kind === 10 /* TokenKind.endGroup */ ||
+                kind === 44 /* TokenKind.increment */ ||
+                kind === 45 /* TokenKind.decrement */) {
                 // kinds of tokens that lead into operators
                 findOperator = true;
             }
@@ -1071,7 +1097,7 @@ export class Trace {
             const token = {
                 kind,
                 value: parseFloat(matched),
-                string: matched
+                string: matched,
             };
             if (kind === 5 /* TokenKind.literalArray */) {
                 token.parsedValues = matched.split('|').map(parseFloat);
@@ -1079,7 +1105,7 @@ export class Trace {
             else if (kind === 11 /* TokenKind.functionCall */ || kind === 12 /* TokenKind.tailCall */) {
                 const callArgStrings = parseCallArgs(matched);
                 if (callArgStrings.length > 0) {
-                    token.parsedArgs = callArgStrings.map(arg => Trace.parse(arg));
+                    token.parsedArgs = callArgStrings.map((arg) => Trace.parse(arg));
                 }
             }
             else if (kind === 47 /* TokenKind.arrayRead */) {
@@ -1226,7 +1252,11 @@ export class Trace {
                         }
                         break;
                     case 1 /* TokenKind.variable */:
-                        if (strict && !vars.has(t.string) && !arrays.has(t.string) && !functions.has(t.string) && !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
+                        if (strict &&
+                            !vars.has(t.string) &&
+                            !arrays.has(t.string) &&
+                            !functions.has(t.string) &&
+                            !writeTargets.has(f.tokens[f.i + 1]?.kind)) {
                             throw new Error(`Runtime error: unknown variable "${t.string}"`);
                         }
                         if (!vars.has(t.string) && functions.has(t.string)) {
@@ -1251,7 +1281,7 @@ export class Trace {
                         break;
                     case 5 /* TokenKind.literalArray */: {
                         const pv = t.parsedValues;
-                        val = pv[rand() * pv.length | 0];
+                        val = pv[(rand() * pv.length) | 0];
                         break;
                     }
                     case 14 /* TokenKind.function */:
@@ -1311,9 +1341,17 @@ export class Trace {
                             const stdEntry = stdlibRegistry.get(fn);
                             if (stdEntry !== undefined && stdlibCategories.has(stdEntry.category)) {
                                 const stdCtx = {
-                                    vars, functions, arrays, rand,
-                                    executionLimit, startedAt: context.startedAt, maxSteps,
-                                    context, strict, stdlibCategories, frame: f
+                                    vars,
+                                    functions,
+                                    arrays,
+                                    rand,
+                                    executionLimit,
+                                    startedAt: context.startedAt,
+                                    maxSteps,
+                                    context,
+                                    strict,
+                                    stdlibCategories,
+                                    frame: f,
                                 };
                                 val = stdEntry.fn(t.parsedArgs ?? [], stdCtx);
                                 if (context.status !== 'completed') {
@@ -1335,7 +1373,9 @@ export class Trace {
                                 }
                                 const argTrace = parsedArgs?.[i];
                                 // Bare function name as argument — pass the Trace reference directly
-                                if (argTrace !== undefined && argTrace.tokens.length === 1 && argTrace.tokens[0].kind === 1 /* TokenKind.variable */) {
+                                if (argTrace !== undefined &&
+                                    argTrace.tokens.length === 1 &&
+                                    argTrace.tokens[0].kind === 1 /* TokenKind.variable */) {
                                     const fnRef = functions.get(argTrace.tokens[0].string);
                                     if (fnRef !== undefined) {
                                         functions.set(param, fnRef);
@@ -1409,7 +1449,9 @@ export class Trace {
                     case 47 /* TokenKind.arrayRead */: {
                         const arrName = t.string;
                         const indexTrace = t.parsedArgs?.[0];
-                        const idxRaw = indexTrace === undefined ? 0 : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
+                        const idxRaw = indexTrace === undefined
+                            ? 0
+                            : (indexTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
                             this.lastRunTime = now() - context.startedAt;
                             this.lastRunSteps = context.steps;
@@ -1437,7 +1479,9 @@ export class Trace {
                     }
                     case 46 /* TokenKind.arrayCreate */: {
                         const sizeTrace = t.parsedArgs?.[0];
-                        const sizeRaw = sizeTrace === undefined ? 0 : (sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
+                        const sizeRaw = sizeTrace === undefined
+                            ? 0
+                            : (sizeTrace.run([], null, vars, functions, arrays, rand, executionLimit, context.startedAt, maxSteps, context, strict, stdlibCategories) ?? 0);
                         if (context.status !== 'completed') {
                             this.lastRunTime = now() - context.startedAt;
                             this.lastRunSteps = context.steps;
@@ -1538,7 +1582,10 @@ export class Trace {
                     f.not = false;
                 }
                 if (f.ptr) {
-                    val = (f.stack === null || val < 0 || !Number.isFinite(val) || val >= f.stack.length) ? 0 : f.stack[val];
+                    val =
+                        f.stack === null || val < 0 || !Number.isFinite(val) || val >= f.stack.length
+                            ? 0
+                            : f.stack[val];
                     f.ptr = false;
                 }
                 f.lastValue = f.value;
@@ -1560,10 +1607,13 @@ export class Trace {
                         f.value = val === 0 ? 0 : f.value / val;
                         break;
                     case 21 /* TokenKind.mod */:
-                        f.value = (val === 0 || !Number.isFinite(val)) ? 0 : f.value % val;
+                        f.value = val === 0 || !Number.isFinite(val) ? 0 : f.value % val;
                         break;
                     case 22 /* TokenKind.pow */:
-                        f.value = (f.value === 0 && val < 0) || !Number.isFinite(f.value) || !Number.isFinite(val) ? 0 : f.value ** val;
+                        f.value =
+                            (f.value === 0 && val < 0) || !Number.isFinite(f.value) || !Number.isFinite(val)
+                                ? 0
+                                : f.value ** val;
                         break;
                     case 23 /* TokenKind.range */:
                         f.value = f.value + rand() * (val - f.value);
@@ -1613,11 +1663,10 @@ export class Trace {
         const context = {
             startedAt,
             steps: 0,
-            status: 'completed'
+            status: 'completed',
         };
-        const rand = options.rand ?? (options.randomSeed === undefined
-            ? Math.random
-            : createSeededRandom(options.randomSeed));
+        const rand = options.rand ??
+            (options.randomSeed === undefined ? Math.random : createSeededRandom(options.randomSeed));
         let value = null;
         try {
             value = this.run(options.args ?? [], options.variables ?? null, vars, functions, arrays, rand, options.timeoutMs ?? 1000, startedAt, options.maxSteps ?? Number.POSITIVE_INFINITY, context, options.strict ?? false, resolveStdlibCategories(options.stdlib));
@@ -1634,7 +1683,7 @@ export class Trace {
             steps: this.lastRunSteps,
             runtimeMs: this.lastRunTime,
             status: this.lastRunStatus,
-            error: context.error
+            error: context.error,
         };
     }
 }

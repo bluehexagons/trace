@@ -123,14 +123,14 @@ export declare class Trace {
     lastRunSteps: number;
     lastRunStatus: TraceRunStatus;
     callParams: string[];
-    vars: (Map<string, number> | null);
-    functions: (Map<string, Trace> | null);
-    arrays: (Map<string, Float64Array> | null);
+    vars: Map<string, number> | null;
+    functions: Map<string, Trace> | null;
+    arrays: Map<string, Float64Array> | null;
     constructor(body: string, tokens: TraceToken[], params: string[], stackSize: number);
     static parse(s: string): Trace;
-    run(args?: number[], variables?: ({
+    run(args?: number[], variables?: {
         [s: string]: number;
-    } | null), vars?: (Map<string, number> | null), functions?: (Map<string, Trace> | null), arrays?: (Map<string, Float64Array> | null), rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean, stdlibCategories?: ReadonlySet<TraceStdlibCategory>): number | null;
+    } | null, vars?: Map<string, number> | null, functions?: Map<string, Trace> | null, arrays?: Map<string, Float64Array> | null, rand?: () => number, executionLimit?: number, executionStart?: number, maxSteps?: number, context?: TraceRunContext, strict?: boolean, stdlibCategories?: ReadonlySet<TraceStdlibCategory>): number | null;
     runWithOptions(options?: TraceRunOptions): TraceRunResult;
 }
 export declare const runTrace: (script: string, ...args: number[]) => number | null;
