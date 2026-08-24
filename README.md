@@ -13,7 +13,7 @@ The core library (`trace`) works in both Node.js (>=20) and modern browsers. The
 ## Installation
 
 ```bash
-npm install https://codeload.github.com/bluehexagons/trace/tar.gz/refs/tags/v0.0.6
+npm install https://codeload.github.com/bluehexagons/trace/tar.gz/refs/tags/v0.1.1
 ```
 
 For local development against a checkout:
@@ -114,6 +114,10 @@ The older `{ persist: true }` option remains available when state only needs to
 belong to one parsed `Trace` instance.
 
 ## Building
+
+Development requires Node.js 20.19 or newer on the Node 20 line, or Node.js
+22.12 or newer. The published runtime remains compatible with Node.js 20 and
+newer.
 
 ```bash
 npm install

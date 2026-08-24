@@ -115,10 +115,10 @@ export declare class Trace {
     tokens: TraceToken[];
     params: string[];
     stackSize: number;
-    static logger: (...data: any[]) => void;
-    static errorLogger: (...data: any[]) => void;
-    logger: (...data: any[]) => void;
-    errorLogger: (...data: any[]) => void;
+    static logger: (message?: any, ...optionalParams: any[]) => void;
+    static errorLogger: (message?: any, ...optionalParams: any[]) => void;
+    logger: (message?: any, ...optionalParams: any[]) => void;
+    errorLogger: (message?: any, ...optionalParams: any[]) => void;
     lastRunTime: number;
     lastRunSteps: number;
     lastRunStatus: TraceRunStatus;
