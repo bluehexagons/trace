@@ -77,6 +77,8 @@ export type TraceRunOptions = {
     randomSeed?: number;
     timeoutMs?: number;
     maxSteps?: number;
+    /** Retained array cells plus new array/argument-stack cells per run, including size headers. Default: 1,048,576. */
+    maxArrayElements?: number;
     persist?: boolean;
     strict?: boolean;
     stdlib?: TraceStdlibOptions | boolean;
@@ -109,6 +111,8 @@ type TraceRunContext = {
     steps: number;
     status: TraceRunStatus;
     error?: string;
+    maxArrayElements?: number;
+    arrayElements?: number;
 };
 export declare class Trace {
     body: string;

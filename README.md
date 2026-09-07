@@ -365,6 +365,17 @@ const result = runTraceWithOptions('q++; q < 10 ? () : q', {
 
 `runTraceWithOptions` and `Trace.runWithOptions` use isolated variables and functions by default. Pass `{ persist: true }` to reuse the `Trace` instance's globals across runs.
 
+`maxArrayElements` bounds language array and argument-stack storage, including
+size headers. It defaults to 1,048,576 cells (8 MiB), also for the legacy `run` API.
+Each run charges arrays retained on entry plus every new allocation, including
+temporary arrays, replacements, nested calls, and `map` output. A rejected
+allocation produces `status: 'error'` in the options API and throws in `run`.
+The budget resets per run, while retained arrays continue to count. Trusted
+callers can select a different non-negative safe-integer budget in the options
+API. This is a conservative array budget, not a total JavaScript heap limit;
+parsing, token caches, variables, and host callbacks still require isolation
+when processing adversarial programs.
+
 ## strict mode
 
 `strict: true` turns several silent behaviors into runtime errors:

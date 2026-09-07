@@ -465,6 +465,8 @@ export type TraceRunOptions = {
   randomSeed?: number;
   timeoutMs?: number;
   maxSteps?: number;
+  /** Retained array cells plus new array/argument-stack cells per run, including size headers. Default: 1,048,576. */
+  maxArrayElements?: number;
   persist?: boolean;
   strict?: boolean;
   stdlib?: TraceStdlibOptions | boolean;
@@ -528,6 +530,24 @@ type TraceRunContext = {
   steps: number;
   status: TraceRunStatus;
   error?: string;
+  maxArrayElements?: number;
+  arrayElements?: number;
+};
+
+const defaultMaxArrayElements = 1_048_576;
+
+const chargeArrayElements = (length: number, context: TraceRunContext): void => {
+  const maximum = context.maxArrayElements ?? defaultMaxArrayElements;
+  const used = context.arrayElements ?? 0;
+  if (!Number.isSafeInteger(length) || length < 0 || length > maximum - used) {
+    throw new Error('Runtime error: array allocation limit exceeded');
+  }
+  context.arrayElements = used + length;
+};
+
+const allocateArray = (length: number, context: TraceRunContext): Float64Array => {
+  chargeArrayElements(length, context);
+  return new Float64Array(length);
 };
 
 const paramNamePattern = /^[a-zA-Z_][\w.]*$/;
@@ -625,9 +645,9 @@ class StackFrame {
   ptr = false;
   i = 0;
 
-  constructor(tokens: TraceToken[], stackLength = 0) {
+  constructor(tokens: TraceToken[], stackLength: number, context: TraceRunContext) {
     this.tokens = tokens;
-    this.stack = stackLength <= 0 ? null : new Float64Array(stackLength);
+    this.stack = stackLength <= 0 ? null : allocateArray(stackLength, context);
   }
 }
 const applySetOp = (op: TokenKind, cur: number, val: number): number => {
@@ -950,7 +970,7 @@ const stdlibMapMut: StdlibFn = (args, ctx) => {
 const stdlibMap: StdlibFn = (args, ctx) => {
   const arr = requireArray(resolveArrayName(args[0]), 'map', ctx);
   if (arr === null) return 0;
-  const out = new Float64Array(arr.length);
+  const out = allocateArray(arr.length, ctx.context);
   out[0] = arr[0];
   const cb = resolveCallable(args[1], ctx);
   if (cb !== null) {
@@ -1274,25 +1294,6 @@ export class Trace {
     strict = false,
     stdlibCategories: ReadonlySet<TraceStdlibCategory> = defaultStdlibCategories,
   ) {
-    const frames = [] as StackFrame[];
-    let fn = '';
-    let script = '';
-    let tc = false;
-    let value: number | null = null;
-    let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize;
-    let f: StackFrame = new StackFrame(this.tokens, stackSize);
-    let stack = f.stack as Float64Array;
-
-    if (stackSize > 0) {
-      stack[0] = stackSize - 1;
-
-      for (let i = 0; i < stackSize && i < args.length; i++) {
-        stack[i + 1] = +args[i];
-      }
-    }
-
-    frames.push(f);
-
     if (vars === null) {
       if (this.vars === null) {
         this.vars = new Map<string, number>();
@@ -1314,11 +1315,41 @@ export class Trace {
       arrays = this.arrays;
     }
 
+    if (context.arrayElements === undefined) {
+      const maximum = context.maxArrayElements ?? defaultMaxArrayElements;
+      if (!Number.isSafeInteger(maximum) || maximum < 0) {
+        throw new Error('Runtime error: maxArrayElements must be a non-negative safe integer');
+      }
+      context.arrayElements = 0;
+      // Charge retained memory once for the shared call tree. Counting every
+      // new allocation also bounds temporary arrays and repeated replacement.
+      for (const array of arrays.values()) chargeArrayElements(array.length, context);
+    }
+
     if (variables !== null) {
       for (const v of Object.getOwnPropertyNames(variables)) {
         vars.set(v, +variables[v]);
       }
     }
+
+    const frames = [] as StackFrame[];
+    let fn = '';
+    let script = '';
+    let tc = false;
+    let value: number | null = null;
+    let stackSize = this.stackSize === -1 ? args.length + 1 : this.stackSize;
+    let f: StackFrame = new StackFrame(this.tokens, stackSize, context);
+    let stack = f.stack as Float64Array;
+
+    if (stackSize > 0) {
+      stack[0] = stackSize - 1;
+
+      for (let i = 0; i < stackSize && i < args.length; i++) {
+        stack[i + 1] = +args[i];
+      }
+    }
+
+    frames.push(f);
 
     let nextTimeoutCheck = context.steps + 1024;
 
@@ -1486,7 +1517,7 @@ export class Trace {
 
             // anonymous function
             const ms = Trace.parse(script);
-            const sf = new StackFrame(ms.tokens, 0);
+            const sf = new StackFrame(ms.tokens, 0, context);
             // anonymous functions share stack with caller
             sf.stack = f.stack;
             if (!tc) {
@@ -1590,10 +1621,12 @@ export class Trace {
               if (!tc) {
                 frames.push(f);
               }
-              frames.push(new StackFrame(ms.tokens, ms.stackSize === -1 ? 0 : ms.stackSize));
+              frames.push(
+                new StackFrame(ms.tokens, ms.stackSize === -1 ? 0 : ms.stackSize, context),
+              );
               continue callStack;
             } else if (fn === '') {
-              const sf = new StackFrame(f.tokens, 0);
+              const sf = new StackFrame(f.tokens, 0, context);
               // anonymous functions share stack with caller
               sf.stack = f.stack;
               if (!tc) {
@@ -1713,7 +1746,7 @@ export class Trace {
               return 0;
             }
             const size = Math.max(0, Math.trunc(sizeRaw));
-            const newArr = new Float64Array(size + 1);
+            const newArr = allocateArray(size + 1, context);
             newArr[0] = size;
             f.newArray = newArr;
             val = size;
@@ -1917,6 +1950,7 @@ export class Trace {
       startedAt,
       steps: 0,
       status: 'completed',
+      maxArrayElements: options.maxArrayElements,
     };
     const rand =
       options.rand ??
