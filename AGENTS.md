@@ -9,7 +9,7 @@ browser-compatible and isolate Node-only behavior in the CLI entry point.
 
 ## Environment and validation
 
-The standard Linux host is an infra-tools-managed agent VM. Use a supported
+The standard Linux host is a Basaltwater-managed agent VM. Use a supported
 Node release (20.19+ on Node 20 or 22.12+) and keep related repositories beside
 this checkout below `~/repos`.
 
