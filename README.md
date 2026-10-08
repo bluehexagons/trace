@@ -13,7 +13,7 @@ The core library (`trace`) works in both Node.js (>=20) and modern browsers. The
 ## Installation
 
 ```bash
-npm install https://codeload.github.com/bluehexagons/trace/tar.gz/refs/tags/v0.1.1
+npm install https://codeload.github.com/bluehexagons/trace/tar.gz/refs/tags/v0.1.2
 ```
 
 For local development against a checkout:
@@ -123,13 +123,6 @@ newer.
 npm install
 npm run check
 ```
-
-## Features:
-
-- near-total lack of syntax error checking
-- does math
-- more powerful than it had to be
-- not powerful enough to do anything particularly useful
 
 # literals, values
 
@@ -337,7 +330,6 @@ calls currently-running function body again (including main script)
 
 # loops
 
-- `() => d++ < 3 ? () : d`
 - `() => d++ < 3 ? () : d`
 - `i++ < 10 ? >() : i`
 
@@ -556,4 +548,6 @@ i = 1;
 - `()=>15;3` -> parse error because of unexpected operand (3)
 - `()=>15;;3` -> OK, script returns 3
 
-There are a lot of syntax errors that go unchecked and probably break everything
+The parser reports common operand/operator errors and invalid function
+parameters, but it does not validate every possible malformed program. Use
+strict runtime mode and tests when scripts need stronger guarantees.
