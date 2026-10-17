@@ -120,8 +120,18 @@ Development requires Node.js 20.19 or newer on the Node 20 line, or Node.js
 newer.
 
 ```bash
-npm install
+npm ci
 npm run check
+```
+
+The build includes TypeScript checking; `npm run typecheck` checks without
+emitting files. Tests use two workers and compact dots, with failure details
+and final counts. Use `npm run test:watch` for interactive watch mode.
+
+```bash
+npm test -- src/__tests__/array-limits.test.ts --reporter=verbose
+npm test -- -t 'array' --maxWorkers=1
+npm test -- --reporter=dot --reporter=json --outputFile=local-artifacts/tests.json
 ```
 
 When refreshing dependencies, npm 10.9.8 on Node 22.23.2 can crash in Arborist's

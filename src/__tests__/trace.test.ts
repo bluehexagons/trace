@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runTrace, runTraceWithOptions, Trace, TraceMemory } from '../index.js';
 
 describe('parse errors', () => {
@@ -177,13 +177,17 @@ describe('execution limits', () => {
   });
 
   it('shares the step budget with function argument expressions', () => {
-    const script = Trace.parse('loop()=>{q++; >loop()}; id(v)=>{v}; id(loop())');
-    script.errorLogger = () => {};
-
-    const result = script.runWithOptions({ maxSteps: 10 });
-    expect(result.value).toBe(0);
-    expect(result.steps).toBeGreaterThan(10);
-    expect(result.status).toBe('step-limit');
+    const errorLogger = vi.spyOn(Trace, 'errorLogger').mockImplementation(() => {});
+    try {
+      const script = Trace.parse('loop()=>{q++; >loop()}; id(v)=>{v}; id(loop())');
+      const result = script.runWithOptions({ maxSteps: 10 });
+      expect(result.value).toBe(0);
+      expect(result.steps).toBeGreaterThan(10);
+      expect(result.status).toBe('step-limit');
+      expect(errorLogger).toHaveBeenCalledWith('Trace exceeded step limit');
+    } finally {
+      errorLogger.mockRestore();
+    }
   });
 
   it('runs with isolated state by default', () => {
@@ -568,8 +572,14 @@ describe('stdlib loops', () => {
   });
 
   it('infinite loop terminates safely under step limit', () => {
-    const r = runTraceWithOptions('while(1, x++)', { maxSteps: 200 });
-    expect(r.status).toBe('step-limit');
+    const errorLogger = vi.spyOn(Trace, 'errorLogger').mockImplementation(() => {});
+    try {
+      const r = runTraceWithOptions('while(1, x++)', { maxSteps: 200 });
+      expect(r.status).toBe('step-limit');
+      expect(errorLogger).toHaveBeenCalledWith('Trace exceeded step limit');
+    } finally {
+      errorLogger.mockRestore();
+    }
   });
 });
 
