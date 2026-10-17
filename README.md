@@ -124,6 +124,13 @@ npm install
 npm run check
 ```
 
+When refreshing dependencies, npm 10.9.8 on Node 22.23.2 can crash in Arborist's
+peer resolution with `Cannot read properties of null (reading 'edgesOut')`.
+Use npm 12.2.0 on a compatible Node 22 release for that lockfile update
+(`npx --yes npm@12.2.0 install`), then verify `npm ci` and `npm run check` with
+the project's selected toolchain. Remove this workaround once the supported
+npm version resolves the Vitest 4 peer graph without the crash.
+
 # literals, values
 
 All literals are resolved to 64-bit floats.
