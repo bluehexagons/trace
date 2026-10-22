@@ -8,7 +8,7 @@ Try Trace in a sandbox: https://bluehexagons.github.io/trace-sandbox/
 
 ## Platform Support
 
-The core library (`trace`) works in both Node.js (>=20) and modern browsers. The `trace/cli` entry point is Node.js-only.
+The core library (`trace`) works in both Node.js (>=24) and modern browsers. The `trace/cli` entry point is Node.js-only.
 
 ## Installation
 
@@ -115,9 +115,7 @@ belong to one parsed `Trace` instance.
 
 ## Building
 
-Development requires Node.js 20.19 or newer on the Node 20 line, or Node.js
-22.12 or newer. The published runtime remains compatible with Node.js 20 and
-newer.
+Development and the published runtime require Node.js 24 or newer.
 
 ```bash
 npm ci
@@ -133,13 +131,6 @@ npm test -- src/__tests__/array-limits.test.ts --reporter=verbose
 npm test -- -t 'array' --maxWorkers=1
 npm test -- --reporter=dot --reporter=json --outputFile=local-artifacts/tests.json
 ```
-
-When refreshing dependencies, npm 10.9.8 on Node 22.23.2 can crash in Arborist's
-peer resolution with `Cannot read properties of null (reading 'edgesOut')`.
-Use npm 12.2.0 on a compatible Node 22 release for that lockfile update
-(`npx --yes npm@12.2.0 install`), then verify `npm ci` and `npm run check` with
-the project's selected toolchain. Remove this workaround once the supported
-npm version resolves the Vitest 4 peer graph without the crash.
 
 # literals, values
 

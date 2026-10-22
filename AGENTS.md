@@ -10,8 +10,8 @@ browser-compatible and isolate Node-only behavior in the CLI entry point.
 ## Environment and validation
 
 Linux development supports Basaltwater-managed CachyOS workstations and Debian
-hosts. Use a supported Node release (20.19+ on Node 20 or 22.12+); `.nvmrc`
-selects the development major without changing the published runtime minimum.
+hosts. Use Node 24 or newer; `.nvmrc` selects the development major.
+The package and development runtime requirements share that baseline.
 Keep primary checkouts beside one another under `~/repos` or the configured
 `--agent-workspace` root; locate primary checkouts with `git worktree list` when
 using isolated worktrees. See Antistatic's
