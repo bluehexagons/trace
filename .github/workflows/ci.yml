@@ -29,3 +29,11 @@ jobs:
 
       - name: Build and test
         run: npm run check
+
+      - name: Verify generated package output
+        run: |
+          changes="$(git status --porcelain --untracked-files=all -- dist)"
+          if [ -n "$changes" ]; then
+            printf 'Generated dist output differs from the checkout:\n%s\n' "$changes"
+            exit 1
+          fi
