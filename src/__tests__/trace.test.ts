@@ -694,3 +694,40 @@ describe('shorthand blocks', () => {
     expect(runTrace('{1} + 5')).toBe(6);
   });
 });
+
+describe('call argument bindings', () => {
+  it('evaluates numeric arguments before assigning overlapping parameter names', () => {
+    expect(runTrace('f(a,b)=>{a*10+b}; a=1; f(2,a)')).toBe(21);
+    expect(runTrace('f(a,b)=>{a*10+b}; a=1; b=2; f(b,a)')).toBe(21);
+  });
+
+  it('evaluates function references before binding overlapping names', () => {
+    expect(runTrace('a()=>{1}; b()=>{2}; f(a,b)=>{a()*10+b()}; f(b,a)')).toBe(21);
+  });
+
+  it('preserves left-to-right argument side effects', () => {
+    expect(runTrace('f(a,b)=>{a*10+b}; x=1; f(x++,x++)')).toBe(23);
+  });
+
+  it('does not bind parameters when a later argument fails', () => {
+    const memory = new TraceMemory();
+    const result = runTraceWithOptions('f(a,b)=>{a+b}; a=7; f(2,missing())', {
+      memory,
+      strict: true,
+    });
+    expect(result.status).toBe('error');
+    expect(memory.variables.get('a')).toBe(7);
+    expect(memory.variables.has('b')).toBe(false);
+  });
+
+  it('does not bind parameters when a later argument exceeds its step budget', () => {
+    const memory = new TraceMemory();
+    const result = runTraceWithOptions('f(a,b)=>{a+b}; a=7; f(2,while(1,0))', {
+      memory,
+      maxSteps: 100,
+    });
+    expect(result.status).toBe('step-limit');
+    expect(memory.variables.get('a')).toBe(7);
+    expect(memory.variables.has('b')).toBe(false);
+  });
+});

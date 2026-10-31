@@ -1390,6 +1390,7 @@ export class Trace {
                         if (functions.has(fn)) {
                             const ms = functions.get(fn);
                             const parsedArgs = t.parsedArgs;
+                            const callArguments = [];
                             for (let i = 0; i < ms.callParams.length; i++) {
                                 const param = ms.callParams[i];
                                 if (!paramNamePattern.test(param)) {
@@ -1402,7 +1403,7 @@ export class Trace {
                                     argTrace.tokens[0].kind === 1 /* TokenKind.variable */) {
                                     const fnRef = functions.get(argTrace.tokens[0].string);
                                     if (fnRef !== undefined) {
-                                        functions.set(param, fnRef);
+                                        callArguments.push(fnRef);
                                         continue;
                                     }
                                 }
@@ -1415,7 +1416,16 @@ export class Trace {
                                     this.lastRunStatus = context.status;
                                     return 0;
                                 }
-                                vars.set(param, +(argValue ?? 0));
+                                callArguments.push(+(argValue ?? 0));
+                            }
+                            // Argument expressions share globals with the caller. Bind only
+                            // after all arguments finish, so parameters cannot affect them.
+                            for (let i = 0; i < ms.callParams.length; i++) {
+                                const argument = callArguments[i];
+                                if (typeof argument === 'number')
+                                    vars.set(ms.callParams[i], argument);
+                                else
+                                    functions.set(ms.callParams[i], argument);
                             }
                             if (!tc) {
                                 frames.push(f);
