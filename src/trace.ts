@@ -1132,15 +1132,15 @@ export class Trace {
         );
       }
 
+      // Consume the source token before expanding shorthand syntax.
+      stringLeft = stringLeft.substring(matched.length);
+
       // Code block sugar: `{ body }` becomes anonymous function `() => { body }`.
       // The scan rule already mapped it to TokenKind.aFunction; rewrite the
       // matched string so downstream handling sees a complete function token.
       if (kind === TokenKind.aFunction && matched[0] === '{') {
         matched = '()=>' + matched;
       }
-
-      // remove consumed text from string
-      stringLeft = stringLeft.substring(matched.length);
 
       if (kind === TokenKind.beep) {
         tokens.push({

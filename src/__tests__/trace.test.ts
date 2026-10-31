@@ -683,3 +683,14 @@ describe('stdlib categories option', () => {
     expect(r.error).toContain('unknown function');
   });
 });
+
+describe('shorthand blocks', () => {
+  it('preserves the statement following a block', () => {
+    expect(runTrace('a = {1}; 100')).toBe(100);
+  });
+
+  it('preserves the operator following a block', () => {
+    expect(runTrace('{1} + 5')).toBe(runTrace('() => {1} + 5'));
+    expect(runTrace('{1} + 5')).toBe(6);
+  });
+});
