@@ -15,7 +15,7 @@ The package and development runtime requirements share that baseline.
 Keep primary checkouts beside one another under `~/repos` or the configured
 `--agent-workspace` root; locate primary checkouts with `git worktree list` when
 using isolated worktrees. See Antistatic's
-[workspace guide](https://github.com/bluehexagons/antistatic/blob/main/docs/sister-repositories.md).
+[workspace guide](https://github.com/bluehexagons/antistatic/blob/main/docs/development/dependencies.md#related-repositories).
 Use the actual OS's Basaltwater guidance for host diagnosis; package validation
 and CI work independently of Basaltwater or sibling source checkouts.
 
