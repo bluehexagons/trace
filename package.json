@@ -1,6 +1,6 @@
 {
   "name": "trace",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Trace - An esoteric, specialized, functional programming language",
   "keywords": [
     "esoteric",

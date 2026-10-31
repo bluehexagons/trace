@@ -300,7 +300,7 @@ add(2, 3)
 > 5
 ```
 
-Argument expressions are evaluated before the function body. Parameter names are then assigned as global variables, so calling `setX(x)` will overwrite the global `x`. Missing arguments default to `0`.
+All supplied argument expressions are evaluated left to right before parameters are bound and the function body runs, including extra arguments. Parameter names are then assigned as global variables, so calling `setX(x)` will overwrite the global `x`. Missing arguments default to `0`. Rebinding a name replaces its previous number, function, or array value.
 
 end statements with `;` or `,`
 

@@ -606,10 +606,22 @@ const applySetOp = (op, cur, val) => {
             return cur;
     }
 };
+// A language name holds one value, even when its type changes between calls.
+const bindValue = (name, value, vars, functions, arrays) => {
+    vars.delete(name);
+    functions.delete(name);
+    arrays.delete(name);
+    if (typeof value === 'number')
+        vars.set(name, value);
+    else if (value instanceof Float64Array)
+        arrays.set(name, value);
+    else
+        functions.set(name, value);
+};
 const closeStatement = (f, vars, functions, arrays, strict = false) => {
     if (f.newArray !== null) {
         if (f.setVar !== '') {
-            arrays.set(f.setVar, f.newArray);
+            bindValue(f.setVar, f.newArray, vars, functions, arrays);
             f.value = f.newArray[0];
         }
         f.newArray = null;
@@ -626,7 +638,7 @@ const closeStatement = (f, vars, functions, arrays, strict = false) => {
         return;
     }
     if (f.valFn !== null && f.setOp === 37 /* TokenKind.set */) {
-        functions.set(f.setVar, f.valFn);
+        bindValue(f.setVar, f.valFn, vars, functions, arrays);
         f.value = 0;
         f.setVar = '';
         f.valFn = null;
@@ -656,7 +668,7 @@ const closeStatement = (f, vars, functions, arrays, strict = false) => {
         throw new Error(`Runtime error: compound assignment to undeclared variable "${f.setVar}"`);
     }
     const newVal = applySetOp(f.setOp, vars.get(f.setVar) ?? 0, f.value);
-    vars.set(f.setVar, newVal);
+    bindValue(f.setVar, newVal, vars, functions, arrays);
     f.value = newVal;
     f.setVar = '';
     f.arrayWrite = false;
@@ -715,7 +727,7 @@ const callCallable = (callable, callerArgs, ctx) => {
     // Set declared parameters as globals (mirrors the existing function-call
     // convention) so named functions see their named params.
     for (let i = 0; i < callable.params.length; i++) {
-        ctx.vars.set(callable.params[i], callerArgs[i] ?? 0);
+        bindValue(callable.params[i], callerArgs[i] ?? 0, ctx.vars, ctx.functions, ctx.arrays);
     }
     return +(callable.trace.run(callerArgs, null, ctx.vars, ctx.functions, ctx.arrays, ctx.rand, ctx.executionLimit, ctx.startedAt, ctx.maxSteps, ctx.context, ctx.strict, ctx.stdlibCategories) ?? 0);
 };
@@ -1179,7 +1191,7 @@ export class Trace {
         }
         if (variables !== null) {
             for (const v of Object.getOwnPropertyNames(variables)) {
-                vars.set(v, +variables[v]);
+                bindValue(v, +variables[v], vars, functions, arrays);
             }
         }
         const frames = [];
@@ -1197,15 +1209,15 @@ export class Trace {
             }
         }
         frames.push(f);
-        let nextTimeoutCheck = context.steps + 1024;
+        context.nextTimeoutCheck ??= context.steps + 1024;
         callStack: while (frames.length > 0) {
             f = frames.pop();
             for (; f.i < f.tokens.length; f.i++) {
                 const t = f.tokens[f.i];
                 let val = null;
                 context.steps++;
-                if (context.steps >= nextTimeoutCheck) {
-                    nextTimeoutCheck = context.steps + 1024;
+                if (context.steps >= context.nextTimeoutCheck) {
+                    context.nextTimeoutCheck = context.steps + 1024;
                     if (now() - context.startedAt > executionLimit) {
                         this.errorLogger('Trace timed out');
                         context.status = 'timeout';
@@ -1333,7 +1345,7 @@ export class Trace {
                             // named function
                             const ms = Trace.parse(script);
                             ms.callParams = callParams;
-                            functions.set(fn, ms);
+                            bindValue(fn, ms, vars, functions, arrays);
                             break;
                         }
                         // anonymous function
@@ -1391,12 +1403,12 @@ export class Trace {
                             const ms = functions.get(fn);
                             const parsedArgs = t.parsedArgs;
                             const callArguments = [];
-                            for (let i = 0; i < ms.callParams.length; i++) {
-                                const param = ms.callParams[i];
+                            for (const param of ms.callParams) {
                                 if (!paramNamePattern.test(param)) {
                                     throw new Error(`Syntax error: invalid function parameter "${param}"`);
                                 }
-                                const argTrace = parsedArgs?.[i];
+                            }
+                            for (const argTrace of parsedArgs ?? []) {
                                 // Bare function name as argument — pass the Trace reference directly
                                 if (argTrace !== undefined &&
                                     argTrace.tokens.length === 1 &&
@@ -1421,11 +1433,7 @@ export class Trace {
                             // Argument expressions share globals with the caller. Bind only
                             // after all arguments finish, so parameters cannot affect them.
                             for (let i = 0; i < ms.callParams.length; i++) {
-                                const argument = callArguments[i];
-                                if (typeof argument === 'number')
-                                    vars.set(ms.callParams[i], argument);
-                                else
-                                    functions.set(ms.callParams[i], argument);
+                                bindValue(ms.callParams[i], callArguments[i] ?? 0, vars, functions, arrays);
                             }
                             if (!tc) {
                                 frames.push(f);
@@ -1469,7 +1477,7 @@ export class Trace {
                             throw new Error(`Runtime error: increment of undeclared variable "${f.lastVar}"`);
                         }
                         val = (vars.get(f.lastVar) ?? 0) + 1;
-                        vars.set(f.lastVar, val);
+                        bindValue(f.lastVar, val, vars, functions, arrays);
                         f.value = f.lastValue;
                         break;
                     case 45 /* TokenKind.decrement */:
@@ -1477,7 +1485,7 @@ export class Trace {
                             throw new Error(`Runtime error: decrement of undeclared variable "${f.lastVar}"`);
                         }
                         val = (vars.get(f.lastVar) ?? 0) - 1;
-                        vars.set(f.lastVar, val);
+                        bindValue(f.lastVar, val, vars, functions, arrays);
                         f.value = f.lastValue;
                         break;
                     case 47 /* TokenKind.arrayRead */: {

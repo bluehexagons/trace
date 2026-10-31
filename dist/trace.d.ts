@@ -109,6 +109,7 @@ export declare class TraceMemory {
 type TraceRunContext = {
     startedAt: number;
     steps: number;
+    nextTimeoutCheck?: number;
     status: TraceRunStatus;
     error?: string;
     maxArrayElements?: number;
